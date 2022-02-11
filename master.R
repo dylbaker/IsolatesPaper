@@ -326,30 +326,39 @@ stats_meanCoefs <- coefs %>%
 # constax.file <- "./raw_data/mothur_outputs/final.an.0.01.cons.taxonomy"
 # shared.file <- "./raw_data/mothur_outputs/final.an.shared"
 # tree.file <- "./raw_data/mothur_outputs/final.an.unique.rep.otuRename.phylip.tre"
+# 
+# list.file <- "./raw_data/mothur_outputs/final.opti_mcc.list"
+# constax.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.cons.taxonomy"
+# shared.file <- "./raw_data/mothur_outputs/final.opti_mcc.shared"
+# tree.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.rep.otuRename.phylip.tre"
 
-list.file <- "./raw_data/mothur_outputs/final.opti_mcc.list"
-constax.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.cons.taxonomy"
-shared.file <- "./raw_data/mothur_outputs/final.opti_mcc.shared"
-tree.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.rep.otuRename.phylip.tre"
-
+list.file <- "./raw_data/mothur_outputs/final.an.list"
+constax.file <- "./raw_data/mothur_outputs/final.an.unique.cons.taxonomy"
+shared.file <- "./raw_data/mothur_outputs/final.an.shared"
+tree.file <- "./raw_data/mothur_outputs/final.an.jclass.unique.tre"
 
 # Read mothur outputs into phyloseq/R
 mo.data <- import_mothur(mothur_list_file = list.file,
                          mothur_constaxonomy_file = constax.file,
                          mothur_shared_file = shared.file)
-                         # ,
-                         # mothur_tree_file = tree.file)
-
-
+# ,
+#                          mothur_tree_file = tree.file)
+# tree.data <- read_tree(treefile = tree.file)
 
 # Convert stats data into phyloseq sample data (syntax of Isolate names changed to match mothur sample name syntax)
-sam.data <- stats_meanCoefs %>%
+sam.dataMiseqNames <- stats_meanCoefs %>%
   mutate(Isolate = str_replace(Isolate, ",", "sep"),
-         Isolate = str_replace(Isolate, "(?<!sep\\d)D", "sepD"))%>%
+         Isolate = str_replace(Isolate, "(?<!sep\\d)D", "sepD"))
+
+sam.dataSangerNames <- sam.dataMiseqNames %>%
+  mutate(Isolate = paste("_", Isolate, sep=""))
+
+sam.data <- rbind(sam.dataMiseqNames, sam.dataSangerNames) %>%
   column_to_rownames(var = "Isolate")%>%
   sample_data(.)
 
 # verify that sample names match (there will be more samples in mo.data, because we included environmental samples in our analysis) - most important here is that syntax is the same (underscores between number and day, ex: 23D3 becomes 23_D3, 30,1DF becomes 30_1DF)
+sample_names(mo.data) <- str_replace(sample_names(mo.data), "_D", "sepD")
 sample_names(mo.data)
 sample_names(sam.data)
 
@@ -378,7 +387,9 @@ otuTable <- as.data.frame(all.data@otu_table)%>%
   ungroup()
 
 isolateTax <- otuTable %>%
-  mutate(contamFlag = ifelse(count <= 0.05*totalReads, T, F))%>%
+  mutate(readType = ifelse(totalReads == 1, "sanger", "miseq"),
+         contamFlag = ifelse(count <= 0.1*totalReads, T, F))%>% # 10% contam threshold
+         # contamFlag = ifelse(count <= 0.05*totalReads, T, F))%>%
 ## This filter pulls out only sample data (removes control, background, and pond OTUs)
   filter(contamFlag == F, str_detect(.$Isolate, "^[:digit:]|^S|^_"))%>% 
   # distinct()%>% ## not needed
@@ -386,7 +397,8 @@ isolateTax <- otuTable %>%
   mutate(numOTUs = n(),
          mixed = ifelse(numOTUs > 1, T, F),
          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","),
-         Isolate = str_replace(Isolate, "sep", ""))%>%
+         Isolate = str_replace(Isolate, "sep", ""),
+         Isolate = str_replace(Isolate, "_", ""))%>%
 # ,
 # ## This ifelse() removes "_" from the beginning of some sample names
 #          Isolate = ifelse(str_detect(Isolate, "^_") == T,
@@ -439,5 +451,3 @@ write.csv(mixed_cultures, file = "./csv_files/collection_tax_data_mixedOnly.csv"
 ## Save the taxonomic information for only pure cultures
 pure_cultures <- isolateTax %>% filter(mixed == F)
 write.csv(pure_cultures, file = "./csv_files/collection_tax_data_pureOnly.csv", row.names = F)
-
-

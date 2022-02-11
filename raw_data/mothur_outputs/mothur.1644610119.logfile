@@ -1,0 +1,163 @@
+Windows version
+
+Using Boost
+mothur v.1.46.1
+Last updated: 9/1/21
+by
+Patrick D. Schloss
+
+Department of Microbiology & Immunology
+
+University of Michigan
+http://www.mothur.org
+
+When using, please cite:
+Schloss, P.D., et al., Introducing mothur: Open-source, platform-independent, community-supported software for describing and comparing microbial communities. Appl Environ Microbiol, 2009. 75(23):7537-41.
+
+Distributed under the GNU General Public License
+
+Type 'help()' for information on the commands that are available
+
+For questions and analysis support, please visit our forum at https://forum.mothur.org
+
+Type 'quit()' to exit program
+
+[NOTE]: Setting random seed to 19760620.
+
+Interactive Mode
+
+
+
+mothur > 
+set.current(processors=36)
+
+Using 36 processors.
+
+Current files saved by mothur:
+processors=36
+
+Output File Names: 
+current_files.summary
+
+
+mothur > 
+system(pwd)
+'pwd' is not recognized as an internal or external command,
+operable program or batch file.
+
+
+mothur > 
+system(ls)
+'ls' is not recognized as an internal or external command,
+operable program or batch file.
+
+
+mothur > 
+system(dir)
+Volume in drive C is OS
+ Volume Serial Number is 06B8-7144
+
+ Directory of C:\Users\jlaue\OneDrive\Documents\Denef_Lab_Stuff\IsolatesPaper\raw_data\mothur_outputs
+
+02/11/2022  03:09 PM    <DIR>          .
+02/11/2022  03:09 PM    <DIR>          ..
+02/11/2022  03:09 PM                 0 commandScreen.output
+02/11/2022  03:08 PM                15 current_files.summary
+02/10/2022  03:34 PM            15,315 final.an.jclass.unique.tre
+02/10/2022  03:16 PM         1,420,601 final.an.list
+02/10/2022  03:18 PM        30,103,828 final.an.shared
+02/10/2022  03:34 PM            16,085 final.an.thetayc.unique.tre
+02/10/2022  03:19 PM         3,840,321 final.an.unique.cons.taxonomy
+02/11/2022  03:09 PM             1,136 mothur.1644610119.logfile
+02/10/2022  03:25 PM    <DIR>          old_outputs
+02/10/2022  03:25 PM                37 readMe.txt.txt
+               9 File(s)     35,397,338 bytes
+               3 Dir(s)  324,519,178,240 bytes free
+
+
+mothur > 
+get.current()
+
+Current RAM usage: 10.5917 Gigabytes. Total Ram: 15.7877 Gigabytes.
+
+Current files saved by mothur:
+processors=36
+
+Current default directory saved by mothur: C:\mothur\
+
+Current working directory: C:\Users\jlaue\OneDrive\Documents\Denef_Lab_Stuff\IsolatesPaper\raw_data\mothur_outputs\
+
+Output File Names: 
+current_files.summary
+
+
+mothur > 
+dist.seqs(fasta=final.fasta, output=lt)
+Unable to open final.fasta. Trying default C:\mothur\final.fasta.
+Unable to open C:\mothur\final.fasta. Trying mothur's executable location C:\mothur\final.fasta.
+Unable to open C:\mothur\final.fasta. Trying mothur's tools location final.fasta.
+Unable to open final.fasta.
+Unable to open final.fasta
+
+Using 36 processors.
+[ERROR]: did not complete dist.seqs.
+
+mothur > 
+system(cd C:\Users\jlaue\OneDrive\Documents\Denef_Lab_Stuff\otuRepTreeSubSampled)
+
+
+mothur > 
+set.dir(.)
+[WARNING]: . is not a valid parameter, ignoring.
+The valid parameters are: tempdefault, blastdir, tools, debug, seed, modifynames, input, output, inputdir, and outputdir.
+[ERROR]: You must provide either an input, output, tempdefault, blastdir, tools, debug or modifynames for the set.dir command.
+[ERROR]: did not complete set.dir.
+
+mothur > 
+set.dir(tempdefault=.)
+Mothur's directories:
+tempDefault=C:\Users\jlaue\OneDrive\Documents\Denef_Lab_Stuff\IsolatesPaper\raw_data\mothur_outputs\
+
+mothur > 
+set.dir(tempdefault=C:\Users\jlaue\OneDrive\Documents\Denef_Lab_Stuff\otuRepTreeSubSampled)
+Mothur's directories:
+tempDefault=C:\Users\jlaue\OneDrive\Documents\Denef_Lab_Stuff\otuRepTreeSubSampled\
+
+mothur > 
+get.current()
+
+Current RAM usage: 9.5455 Gigabytes. Total Ram: 15.7877 Gigabytes.
+
+Current files saved by mothur:
+processors=36
+
+Current default directory saved by mothur: C:\Users\jlaue\OneDrive\Documents\Denef_Lab_Stuff\otuRepTreeSubSampled\
+
+Current working directory: C:\Users\jlaue\OneDrive\Documents\Denef_Lab_Stuff\IsolatesPaper\raw_data\mothur_outputs\
+
+Output File Names: 
+current_files.summary
+
+
+mothur > 
+quit
+Logfile : mothur.1644610119.logfile
+
+
+
+************************************************************
+************************************************************
+************************************************************
+Detected 3 [ERROR] messages, please review.
+************************************************************
+************************************************************
+************************************************************
+
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<^>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<^>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<^>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Detected 1 [WARNING] messages, please review.
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<^>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<^>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<^>>>>>>>>>>>>>>>>>>>>>>>>>>>>>

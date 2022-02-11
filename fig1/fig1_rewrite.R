@@ -5,7 +5,7 @@ library(patchwork)
 library(ggpubr)
 
 #### Directory Set ####
-setwd("C:/Users/jlaue/OneDrive/Documents/Denef_Lab_Stuff/R_scripts_git/Github Reorganization/")
+setwd("C:/Users/jlaue/OneDrive/Documents/Denef_Lab_Stuff/IsolatesPaper/")
 getwd()
 
 #### Jar Info ####

@@ -186,7 +186,7 @@ bar_chart <- afhData_all%>%
   facet_wrap(vars(facet_title))
 bar_chart
 
-ggsave("./fig3/AFH_experiments/barChart.png", plot = bar_chart, device = "png",
+ggsave("./fig3/barChart.png", plot = bar_chart, device = "png",
        scale = 1, width = 16, height = 8, dpi = 300, units = "in", limitsize = TRUE)
 
 ## Line Plot
@@ -209,5 +209,5 @@ line_plot <- afhData_all%>%
   # facet_wrap(vars(collectionCode))
 line_plot
 
-ggsave("./fig3/AFH_experiments/linePlot_geomSmooth.png", plot = line_plot, device = "png",
+ggsave("./fig3/linePlot_geomSmooth.png", plot = line_plot, device = "png",
        scale = 1, width = 16, height = 8, dpi = 300, units = "in", limitsize = TRUE)
