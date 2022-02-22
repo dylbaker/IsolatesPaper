@@ -357,7 +357,7 @@ sam.dataPondNames <- data.frame(Isolate = c("P1sepD0sepR1sep022um", "P1sepD0sepR
                                             "P1sepD0sepR3sep022um", "P2sepD0sepR1sep022um",
                                             "P2sepD0sepR2sep022um", "P2sepD0sepR3sep022um",
                                             "P3sepD0sepR1sep022um", "P3sepD0sepR2sep022um",
-                                            "P3sepD0sepR3sep022um" ))%>%
+                                            "P3sepD0sepR3sep022um"))%>%
   mutate(host_species = "naturalCommunity",
          plate_no = NA,
          pCC_greater = NA,
@@ -381,6 +381,7 @@ sam.data <- rbind(sam.dataMiseqNames, sam.dataSangerNames, sam.dataPondNames)%>%
 allSamples <- rbind(sam.dataMiseqNames, sam.dataSangerNames, sam.dataPondNames)%>%
   pull(Isolate)
 
+# this pruning function should tell phyloseq to only return the samples we selected above
 mo.dataPruned <- prune_samples(allSamples, mo.data)
 sample_names(mo.dataPruned)
 
@@ -432,6 +433,32 @@ isolateTax <- otuTable %>%
          Isolate = str_replace(Isolate, "_", ""))%>%
   left_join(., taxTable)
 
+#### Pull the Pond Data Only ####
+pondOTUs <- as.data.frame(all.data@otu_table)%>%
+  rownames_to_column(., var = "otu")%>%
+  pivot_longer(!otu, names_to = "Isolate", values_to = "count")%>%
+  filter(count != 0,
+         Isolate == "P1sepD0sepR1sep022um" |
+           Isolate == "P1sepD0sepR2sep022um"|
+           Isolate == "P2sepD0sepR2sep022um"|
+           Isolate == "P2sepD0sepR3sep022um"|
+           Isolate == "P3sepD0sepR1sep022um"|
+           Isolate == "P3sepD0sepR2sep022um"|
+           Isolate == "P3sepD0sepR3sep022um")%>%
+  group_by(Isolate)%>%
+  # mutate(totalReads = sum(count),
+  #        otuMatches = n())%>%
+  ungroup()
+
+pondTax <- pondOTUs %>%
+  group_by(Isolate)%>%
+  mutate(numOTUs = n(),
+         mixed = ifelse(numOTUs > 1, T, F),
+         Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
+         Isolate = str_replace(Isolate, "sep", ""),
+         Isolate = str_replace(Isolate, "_", ""))%>%
+  left_join(., taxTable)
+
 #### Write CSV Files ####
 ## Save Colors for Future Figures
 write.csv(color_df, "./csv_files/colors.csv", row.names = F)
@@ -467,4 +494,7 @@ write.csv(mixed_cultures, file = "./csv_files/collection_tax_data_mixedOnly.csv"
 ## Save the taxonomic information for only pure cultures
 pure_cultures <- isolateTax %>% filter(mixed == F)
 write.csv(pure_cultures, file = "./csv_files/collection_tax_data_pureOnly.csv", row.names = F)
+
+## Save the taxonomic information for the pond/natural community Data
+write.csv(pondTax, file = "./csv_files/natCom_tax_data.csv", row.names = F)
 
