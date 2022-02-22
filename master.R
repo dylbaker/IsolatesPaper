@@ -335,15 +335,15 @@ stats_meanCoefs <- coefs %>%
 list.file <- "./raw_data/mothur_outputs/final.an.list"
 constax.file <- "./raw_data/mothur_outputs/final.an.unique.cons.taxonomy"
 shared.file <- "./raw_data/mothur_outputs/final.an.shared"
-tree.file <- "./raw_data/mothur_outputs/final.an.jclass.unique.tre"
+tree.file <- "./raw_data/mothur_outputs/final.an.unique.rep.otuRename.phylip.tre"
+# tree.file <- "./raw_data/mothur_outputs/final.an.jclass.unique.tre"
 
 # Read mothur outputs into phyloseq/R
 mo.data <- import_mothur(mothur_list_file = list.file,
                          mothur_constaxonomy_file = constax.file,
-                         mothur_shared_file = shared.file)
-# ,
-#                          mothur_tree_file = tree.file)
-# tree.data <- read_tree(treefile = tree.file)
+                         mothur_shared_file = shared.file,
+                         mothur_tree_file = tree.file)
+tree.data <- read_tree(treefile = tree.file)
 
 # Convert stats data into phyloseq sample data (syntax of Isolate names changed to match mothur sample name syntax)
 sam.dataMiseqNames <- stats_meanCoefs %>%
@@ -353,25 +353,56 @@ sam.dataMiseqNames <- stats_meanCoefs %>%
 sam.dataSangerNames <- sam.dataMiseqNames %>%
   mutate(Isolate = paste("_", Isolate, sep=""))
 
-sam.data <- rbind(sam.dataMiseqNames, sam.dataSangerNames) %>%
+sam.dataPondNames <- data.frame(Isolate = c("P1sepD0sepR1sep022um", "P1sepD0sepR2sep022um",
+                                            "P1sepD0sepR3sep022um", "P2sepD0sepR1sep022um",
+                                            "P2sepD0sepR2sep022um", "P2sepD0sepR3sep022um",
+                                            "P3sepD0sepR1sep022um", "P3sepD0sepR2sep022um",
+                                            "P3sepD0sepR3sep022um" ))%>%
+  mutate(host_species = "naturalCommunity",
+         plate_no = NA,
+         pCC_greater = NA,
+         pCC_less = NA,
+         pGR_greater = NA,
+         pGR_less = NA,
+         ccEffect = NA,
+         grEffect = NA,
+         annotation = NA,
+         meanCC = NA,
+         seCC = NA,
+         meanGR = NA,
+         seGR = NA)
+
+sam.data <- rbind(sam.dataMiseqNames, sam.dataSangerNames, sam.dataPondNames)%>%
   column_to_rownames(var = "Isolate")%>%
   sample_data(.)
 
+
+# Here We Filter the Mothur outputs to only include samples of interest and pond (natural community) data
+allSamples <- rbind(sam.dataMiseqNames, sam.dataSangerNames, sam.dataPondNames)%>%
+  pull(Isolate)
+
+mo.dataPruned <- prune_samples(allSamples, mo.data)
+sample_names(mo.dataPruned)
+
 # verify that sample names match (there will be more samples in mo.data, because we included environmental samples in our analysis) - most important here is that syntax is the same (underscores between number and day, ex: 23D3 becomes 23_D3, 30,1DF becomes 30_1DF)
-sample_names(mo.data) <- str_replace(sample_names(mo.data), "_D", "sepD")
-sample_names(mo.data)
+# sample_names(mo.data) <- str_replace(sample_names(mo.data), "_D", "sepD")
+# sample_names(mo.data)
 sample_names(sam.data)
 
 # change taxonomic "rank names" to recognizable classifications (rank 1-7 to KPCOFGS)
-rank_names(mo.data)
-colnames(tax_table(mo.data)) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus")
-rank_names(mo.data)
+rank_names(mo.dataPruned)
+colnames(tax_table(mo.dataPruned)) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus")
+rank_names(mo.dataPruned)
+# rank_names(mo.data)
+# colnames(tax_table(mo.data)) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus")
+# rank_names(mo.data)
 
 # plot a test tree using the mothur data (not needed right here)
 # plot_tree(mo.data, "treeonly", ladderize = T)
 
 # full phyloseq object that combines the tax data from mothur with the coculture data
-all.data <- merge_phyloseq(mo.data, sam.data)
+all.data <- merge_phyloseq(mo.dataPruned, sam.data)
+# all.data <- merge_phyloseq(mo.data, sam.data)
 
 #### Classify Isolates as Pure or Mixed Cultures ####
 taxTable <- as.data.frame(all.data@tax_table)%>%
@@ -383,37 +414,22 @@ otuTable <- as.data.frame(all.data@otu_table)%>%
   filter(count != 0)%>%
   group_by(Isolate)%>%
   mutate(totalReads = sum(count),
-         otuMatches = n())%>%
+         otuMatches = n(),
+         readType = ifelse(totalReads == 1, "sanger", "miseq"),
+         contamFlag = ifelse(count <= 0.1*totalReads, T, F))%>% # 10% contam threshold
+         # contamFlag = ifelse(count <= 0.05*totalReads, T, F))%>% #5% contam threshold
   ungroup()
 
-isolateTax <- otuTable %>%
-  mutate(readType = ifelse(totalReads == 1, "sanger", "miseq"),
-         contamFlag = ifelse(count <= 0.1*totalReads, T, F))%>% # 10% contam threshold
-         # contamFlag = ifelse(count <= 0.05*totalReads, T, F))%>%
+isolateTax <- otuTable %>% 
 ## This filter pulls out only sample data (removes control, background, and pond OTUs)
   filter(contamFlag == F, str_detect(.$Isolate, "^[:digit:]|^S|^_"))%>% 
   # distinct()%>% ## not needed
   group_by(Isolate)%>%
   mutate(numOTUs = n(),
          mixed = ifelse(numOTUs > 1, T, F),
-         Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","),
+         Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
          Isolate = str_replace(Isolate, "sep", ""),
          Isolate = str_replace(Isolate, "_", ""))%>%
-# ,
-# ## This ifelse() removes "_" from the beginning of some sample names
-#          Isolate = ifelse(str_detect(Isolate, "^_") == T,
-#                           str_extract(Isolate, "(\\d+)(_|)D."),
-# ## some samples used a different naming convention ("S" means "DF")
-# ## This ifelse() changes these sample names to be uniform
-#                           ifelse(str_detect(Isolate, "^S") == T,
-#                                  paste(str_extract(Isolate, "(\\d+)"),
-#                                        "DF", sep = ""), Isolate)),
-# ## This ifelse removes mothur naming syntax and reverts Isolate names back to coculture naming conventions (removes underscores mainly)
-#          Isolate = ifelse(str_detect(Isolate, "\\d_D") == T,
-#                           str_replace(Isolate, "_", ""),
-#                           ifelse(str_detect(Isolate, "\\d_\\d") == T,
-#                                  str_replace(Isolate, "_", ","), Isolate)))%>%
-  
   left_join(., taxTable)
 
 #### Write CSV Files ####
@@ -451,3 +467,4 @@ write.csv(mixed_cultures, file = "./csv_files/collection_tax_data_mixedOnly.csv"
 ## Save the taxonomic information for only pure cultures
 pure_cultures <- isolateTax %>% filter(mixed == F)
 write.csv(pure_cultures, file = "./csv_files/collection_tax_data_pureOnly.csv", row.names = F)
+

@@ -1,0 +1,13 @@
+## Phylip Dist
+dist.seqs(fasta=final.fasta, output=lt)
+
+## OTU Reps
+get.oturep(phylip=final.phylip.dist, list=final.an.list, fasta=final.fasta, count=final.count_table)
+
+## Rename Representative Sequence Files With OTU Number (Rather than Sequence Name)
+system(sed 's/>M.*Otu/>Otu/g' final.an.unique.rep.fasta |sed -e 's/|.*//g'> final.an.unique.rep.otuRename.fasta)
+
+## Recalculate Distance Matrix With Representative Sequences and Build Tree
+dist.seqs(fasta=final.an.unique.rep.otuRename.fasta, output=lt, processors=36)
+
+# clearcut(phylip=final.an.unique.rep.otuRename.phylip.dist)

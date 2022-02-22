@@ -7,50 +7,48 @@ library(ggtree)
 
 # source("./master.R")
 
-tree.file <- "./raw_data/mothur_outputs/final.an.jclass.unique.tre"
+# tree.file <- "./raw_data/mothur_outputs/final.an.jclass.unique.tre"
+tree.file <- "./raw_data/mothur_outputs/final.an.unique.rep.otuRename.phylip.tre"
 
 tree.data <- read_tree(treefile = tree.file)
 treeBasic <- plot_tree(tree.data, ladderize=T)
 treeBasic
 
-
-sam.tree <- merge_phyloseq(sam.data, tree.data)
-
-treeGR <- plot_tree(tree.data, ladderize=T, color = "grEffect", justify = "left", label.tips = "Genus")
+treeGR <- plot_tree(all.data, ladderize=T, color = "grEffect", justify = "left", label.tips = "Genus")
 treeGR
 
 treeCC <- plot_tree(all.data, ladderize=T, color = "ccEffect", justify = "left")
 treeCC
 
-treeHost <- plot_tree(all.data, ladderize = T, color = "algalHost", justify = "left")
+treeHost <- plot_tree(all.data, ladderize = T, color = "host_species", justify = "left")
 treeHost
 
-#### Testing Fasttree ####
-
-fasttree.file <- "fullTree.fasttree.nwk"
-
-ft.data <- import_mothur(mothur_list_file = list.file,
-                         mothur_constaxonomy_file = constax.file,
-                         mothur_shared_file = shared.file,
-                         mothur_tree_file = fasttree.file)%>%
-  merge_phyloseq(., sam.data)
-
-rank_names(ft.data)
-colnames(tax_table(ft.data)) <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
-rank_names(ft.data)
-
-fasttree <- plot_tree(ft.data, "treeonly", ladderize = T) + coord_polar(theta = "y")
-fasttree
-
-fasttreeGR <- plot_tree(ft.data, ladderize=T, color = "grEffect")
-fasttreeGR
-
-fasttreeCC <- plot_tree(ft.data, ladderize=T, color = "ccEffect", justify = "left")
-fasttreeCC
-
-fasttreeHost <- plot_tree(ft.data, ladderize = T, color = "algalHost", justify = "left")
-fasttreeHost
-
+#### Testing Fasttree (Commented Out) ####
+# 
+# fasttree.file <- "fullTree.fasttree.nwk"
+# 
+# ft.data <- import_mothur(mothur_list_file = list.file,
+#                          mothur_constaxonomy_file = constax.file,
+#                          mothur_shared_file = shared.file,
+#                          mothur_tree_file = fasttree.file)%>%
+#   merge_phyloseq(., sam.data)
+# 
+# rank_names(ft.data)
+# colnames(tax_table(ft.data)) <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+# rank_names(ft.data)
+# 
+# fasttree <- plot_tree(ft.data, "treeonly", ladderize = T) + coord_polar(theta = "y")
+# fasttree
+# 
+# fasttreeGR <- plot_tree(ft.data, ladderize=T, color = "grEffect")
+# fasttreeGR
+# 
+# fasttreeCC <- plot_tree(ft.data, ladderize=T, color = "ccEffect", justify = "left")
+# fasttreeCC
+# 
+# fasttreeHost <- plot_tree(ft.data, ladderize = T, color = "host_species", justify = "left")
+# fasttreeHost
+# 
 
 #### Filter OTUs ####
 
@@ -77,15 +75,15 @@ otu_in_isolate <- select(otu_df, otu) %>%
 
 pruned.data <- prune_taxa(otu_in_isolate, all.data)
 
-pruned.ft.data <- prune_taxa(otu_in_isolate, ft.data)
+# pruned.ft.data <- prune_taxa(otu_in_isolate, ft.data)
 
 pruned.tree <- plot_tree(pruned.data, label.tips="taxa_names", ladderize="left", color="Class")
 pruned.tree
 
-pruned.ft.tree <- plot_tree(pruned.ft.data, nodelabf=nodeplotboot(), label.tips="taxa_names", ladderize="left", color="Class")
-pruned.ft.tree
+# pruned.ft.tree <- plot_tree(pruned.ft.data, nodelabf=nodeplotboot(), label.tips="taxa_names", ladderize="left", color="Class")
+# pruned.ft.tree
 
-pruned.treeGR <- plot_tree(pruned.ft.data, ladderize = T, color = "grEffect", justify = "left")
+pruned.treeGR <- plot_tree(pruned.data, ladderize = T, color = "grEffect", justify = "left")
 pruned.treeGR
 
 pruned.treeCC <- plot_tree(pruned.data, ladderize = T, color = "ccEffect", justify = "left")
@@ -95,20 +93,23 @@ pruned.treeCC
 #### Useful Functions for Algal Host Level Analysis ####
 
 filter_host <- function(host){
-  species_filtered <- filter(sample_key, algalHost == host)%>%
-    rownames_to_column(., var = "Isolate")%>%
-    select(Isolate)%>%
-    left_join(otu_df)%>%
-    group_by(Isolate)%>%
-    mutate(total_reads = sum(reads),
-           percent_total = reads/sum(reads)*100)%>%
-    filter(percent_total >= 80)
+  sanger_filtered <- filter(sam.dataSangerNames, host_species == host)
+  miseq_filtered <- filter(sam.dataMiseqNames, host_species == host)
+  species_filtered <- rbind(sanger_filtered, miseq_filtered)
+  # %>%
+    # rownames_to_column(., var = "Isolate")%>%
+    # select(Isolate)%>%
+    # left_join(otu_df)%>%
+    # group_by(Isolate)%>%
+    # mutate(total_reads = sum(reads),
+    #        percent_total = reads/sum(reads)*100)%>%
+    # filter(percent_total >= 80)
   
   otus <- pull(species_filtered, otu)
   
   isolates <- select(species_filtered, Isolate)
   
-  sample.data <- sample_key %>%
+  sample.data <- sam.data %>%
     rownames_to_column(., var="Isolate")%>%
     left_join(isolates, .)%>%
     column_to_rownames(., var="Isolate")%>%
