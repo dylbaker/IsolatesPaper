@@ -98,8 +98,8 @@ grubbs <- function(df){
 
 
 #### Set Up Colors ####
-color_df <- data.frame(hostLong = c("Chlorella", "Coelastrum", "Monoraphidium",
-                                    "Scenedesmus", "Selenastrum"),
+color_df <- data.frame(hostLong = c("chlorella", "coelastrum", "monoraphidium",
+                                    "scenedesmus", "selenastrum"),
                        hostShort = c("CS", "CM", "MM", "SA", "SC"),
                        color = c("#f8766d", "#a3a500", "#00bf7d", "#00b0f6", "#e76bf3"))
 #### Read in Plate Reader Data and Combine with Plate Maps ####
@@ -372,42 +372,67 @@ sam.dataPondNames <- data.frame(Isolate = c("P1sepD0sepR1sep022um", "P1sepD0sepR
          meanGR = NA,
          seGR = NA)
 
-sam.data <- rbind(sam.dataMiseqNames, sam.dataSangerNames, sam.dataPondNames)%>%
+sam.dataJarNames <- data.frame(Isolate = str_subset(sample_names(mo.data), "^J"))%>%
+  mutate(host_species = ifelse(str_detect(Isolate, "^J[1:9]") == T, "chlorella",
+                        ifelse(str_detect(Isolate, "^J[10:18]") == T, "coelastrum",
+                        ifelse(str_detect(Isolate, "^J[19:27]") == T, "scenedesmus",
+                        ifelse(str_detect(Isolate, "^J[28:36]") == T, "monoraphidium",
+                        ifelse(str_detect(Isolate, "^J[37:45]") == T, "selenastrum",
+                               "Natural Community"))))),
+         plate_no = NA,
+         pCC_greater = NA,
+         pCC_less = NA,
+         pGR_greater = NA,
+         pGR_less = NA,
+         ccEffect = NA,
+         grEffect = NA,
+         annotation = NA,
+         meanCC = NA,
+         seCC = NA,
+         meanGR = NA,
+         seGR = NA)
+
+sam.dataDF <- rbind(sam.dataMiseqNames, sam.dataSangerNames,
+                    sam.dataPondNames, sam.dataJarNames)
+
+sam.data <- sam.dataDF %>%
   column_to_rownames(var = "Isolate")%>%
   sample_data(.)
 
-
-# Here We Filter the Mothur outputs to only include samples of interest and pond (natural community) data
-allSamples <- rbind(sam.dataMiseqNames, sam.dataSangerNames, sam.dataPondNames)%>%
-  pull(Isolate)
-
-# this pruning function should tell phyloseq to only return the samples we selected above
-mo.dataPruned <- prune_samples(allSamples, mo.data)
-sample_names(mo.dataPruned)
+# # Here We Filter the Mothur outputs to only include samples of interest and pond (natural community) data
+# allSamples <- rbind(sam.dataMiseqNames, sam.dataSangerNames, sam.dataPondNames)%>%
+#   pull(Isolate)
+# 
+# # this pruning function should tell phyloseq to only return the samples we selected above
+# mo.dataPruned <- prune_samples(allSamples, mo.data)
+# sample_names(mo.dataPruned)
 
 # verify that sample names match (there will be more samples in mo.data, because we included environmental samples in our analysis) - most important here is that syntax is the same (underscores between number and day, ex: 23D3 becomes 23_D3, 30,1DF becomes 30_1DF)
-# sample_names(mo.data) <- str_replace(sample_names(mo.data), "_D", "sepD")
-# sample_names(mo.data)
+sample_names(mo.data) <- str_replace(sample_names(mo.data), "_D", "sepD")
+sample_names(mo.data)
 sample_names(sam.data)
 
 # change taxonomic "rank names" to recognizable classifications (rank 1-7 to KPCOFGS)
-rank_names(mo.dataPruned)
-colnames(tax_table(mo.dataPruned)) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus")
-rank_names(mo.dataPruned)
-# rank_names(mo.data)
-# colnames(tax_table(mo.data)) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus")
-# rank_names(mo.data)
-
-# plot a test tree using the mothur data (not needed right here)
-# plot_tree(mo.data, "treeonly", ladderize = T)
+# rank_names(mo.dataPruned)
+# colnames(tax_table(mo.dataPruned)) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus")
+# rank_names(mo.dataPruned)
+rank_names(mo.data)
+colnames(tax_table(mo.data)) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus")
+rank_names(mo.data)
 
 # full phyloseq object that combines the tax data from mothur with the coculture data
-all.data <- merge_phyloseq(mo.dataPruned, sam.data)
-# all.data <- merge_phyloseq(mo.data, sam.data)
+# all.data <- merge_phyloseq(mo.dataPruned, sam.data)
+all.data <- merge_phyloseq(mo.data, sam.data)
 
 #### Classify Isolates as Pure or Mixed Cultures ####
 taxTable <- as.data.frame(all.data@tax_table)%>%
   rownames_to_column(., var = "otu")
+
+sampleData <- sam.dataDF %>%
+  mutate(Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","),
+         Isolate = str_replace(Isolate, "sep", ""),
+         Isolate = str_replace(Isolate, "_", ""))%>%
+  distinct()
 
 otuTable <- as.data.frame(all.data@otu_table)%>%
   rownames_to_column(., var = "otu")%>%
@@ -431,10 +456,12 @@ isolateTax <- otuTable %>%
          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
          Isolate = str_replace(Isolate, "sep", ""),
          Isolate = str_replace(Isolate, "_", ""))%>%
+  left_join(., sampleData)%>%
   left_join(., taxTable)
+  
 
 #### Pull the Pond Data Only ####
-pondOTUs <- as.data.frame(all.data@otu_table)%>%
+pondTax <- as.data.frame(all.data@otu_table)%>%
   rownames_to_column(., var = "otu")%>%
   pivot_longer(!otu, names_to = "Isolate", values_to = "count")%>%
   filter(count != 0,
@@ -446,17 +473,28 @@ pondOTUs <- as.data.frame(all.data@otu_table)%>%
            Isolate == "P3sepD0sepR2sep022um"|
            Isolate == "P3sepD0sepR3sep022um")%>%
   group_by(Isolate)%>%
-  # mutate(totalReads = sum(count),
-  #        otuMatches = n())%>%
-  ungroup()
+  mutate(numOTUs = n(),
+         mixed = ifelse(numOTUs > 1, T, F),
+         Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
+         Isolate = str_replace(Isolate, "sep", ""),
+         Isolate = str_replace(Isolate, "_", ""))%>%
+  left_join(., sampleData)%>%
+  left_join(., taxTable)
 
-pondTax <- pondOTUs %>%
+#### Pull the Phycosphere Data Only ####
+
+phycosphereTax <- as.data.frame(all.data@otu_table)%>%
+  rownames_to_column(., var = "otu")%>%
+  pivot_longer(!otu, names_to = "Isolate", values_to = "count")%>%
+  filter(count != 0,
+         str_detect(Isolate, "^J") == T)%>%
   group_by(Isolate)%>%
   mutate(numOTUs = n(),
          mixed = ifelse(numOTUs > 1, T, F),
          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
          Isolate = str_replace(Isolate, "sep", ""),
          Isolate = str_replace(Isolate, "_", ""))%>%
+  left_join(., sampleData)%>%
   left_join(., taxTable)
 
 #### Write CSV Files ####
@@ -498,3 +536,5 @@ write.csv(pure_cultures, file = "./csv_files/collection_tax_data_pureOnly.csv", 
 ## Save the taxonomic information for the pond/natural community Data
 write.csv(pondTax, file = "./csv_files/natCom_tax_data.csv", row.names = F)
 
+## Save the taxonomic information for the phycosphere data
+write.csv(phycosphereTax, file = "./csv_files/phycosphere_tax_data.csv", row.names = F)
