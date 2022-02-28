@@ -183,6 +183,7 @@ bar_chart <- afhData_all%>%
   ggplot(., aes(x = algalSpecies, y = aucLogNorm_mean, fill = Effect, color = afh))+
   geom_bar(stat = "identity")+
   geom_errorbar(aes(ymin = aucLogNorm_mean-(2*aucLogNorm_sd), ymax = aucLogNorm_mean+(2*aucLogNorm_sd)))+
+  coord_flip()+ ## Flips coordinates to make axes more readable
   facet_wrap(vars(collectionCode))
   # facet_wrap(vars(facet_title))
 bar_chart
