@@ -37,7 +37,7 @@ grPlot_facet <- stats_normCoefs %>%
   scale_color_manual(values = colors$color)
 grPlot_facet
 
-ggsave("./fig2/growthRate_plot_facet.png", grPlot_facet, device = "png", height = 10, width = 8)
+ggsave("./fig2/growthRate_plot_facet.pdf", grPlot_facet, device = "pdf", height = 10, width = 8)
 
 ccPlot_facet <- stats_normCoefs %>%
   mutate(significant = ifelse(pCC_greater <= 0.05 | pCC_less <= 0.05, T, F))%>%
@@ -58,4 +58,4 @@ ccPlot_facet <- stats_normCoefs %>%
   scale_color_manual(values = colors$color)
 ccPlot_facet
 
-ggsave("./fig2/carryingCapacity_plot_facet.png", ccPlot_facet, device = "png", height = 10, width = 8)
+ggsave("./fig2/carryingCapacity_plot_facet.pdf", ccPlot_facet, device = "pdf", height = 10, width = 8)

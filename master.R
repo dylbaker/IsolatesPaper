@@ -315,27 +315,12 @@ stats_meanCoefs <- coefs %>%
 
 #### Read in Mothur Outputs and Combine with Coculture Data and Stats ####
 # Define mothur outputs
-## NOTE: These are the outputs from the old pipeline
-# tree.file <- "./raw_data/mothur_outputs/old_pipeline_outputs/fullTree.phylip.tre"
-# constax.file <- "./raw_data/mothur_outputs/old_pipeline_outputs/fullTree.cons.taxonomy"
-# shared.file <- "./raw_data/mothur_outputs/old_pipeline_outputs/fullTree.an.shared"
-# list.file <- "./raw_data/mothur_outputs/old_pipeline_outputs/fullTree.an.list"
-
-#### NEW MOTHUR OUTPUTS ####
-# list.file <- "./raw_data/mothur_outputs/final.an.list"
-# constax.file <- "./raw_data/mothur_outputs/final.an.0.01.cons.taxonomy"
-# shared.file <- "./raw_data/mothur_outputs/final.an.shared"
-# tree.file <- "./raw_data/mothur_outputs/final.an.unique.rep.otuRename.phylip.tre"
-# 
-# list.file <- "./raw_data/mothur_outputs/final.opti_mcc.list"
-# constax.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.cons.taxonomy"
-# shared.file <- "./raw_data/mothur_outputs/final.opti_mcc.shared"
-# tree.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.rep.otuRename.phylip.tre"
-
 list.file <- "./raw_data/mothur_outputs/final.an.list"
 constax.file <- "./raw_data/mothur_outputs/final.an.unique.cons.taxonomy"
 shared.file <- "./raw_data/mothur_outputs/final.an.shared"
+# Tree using representative sequences from each OTU
 tree.file <- "./raw_data/mothur_outputs/final.an.unique.rep.otuRename.phylip.tre"
+# Tree that uses isolate names, result of shared.tree() command in mothur --> looks very weird
 # tree.file <- "./raw_data/mothur_outputs/final.an.jclass.unique.tre"
 
 # Read mothur outputs into phyloseq/R
@@ -399,29 +384,17 @@ sam.data <- sam.dataDF %>%
   column_to_rownames(var = "Isolate")%>%
   sample_data(.)
 
-# # Here We Filter the Mothur outputs to only include samples of interest and pond (natural community) data
-# allSamples <- rbind(sam.dataMiseqNames, sam.dataSangerNames, sam.dataPondNames)%>%
-#   pull(Isolate)
-# 
-# # this pruning function should tell phyloseq to only return the samples we selected above
-# mo.dataPruned <- prune_samples(allSamples, mo.data)
-# sample_names(mo.dataPruned)
-
 # verify that sample names match (there will be more samples in mo.data, because we included environmental samples in our analysis) - most important here is that syntax is the same (underscores between number and day, ex: 23D3 becomes 23_D3, 30,1DF becomes 30_1DF)
 sample_names(mo.data) <- str_replace(sample_names(mo.data), "_D", "sepD")
 sample_names(mo.data)
 sample_names(sam.data)
 
 # change taxonomic "rank names" to recognizable classifications (rank 1-7 to KPCOFGS)
-# rank_names(mo.dataPruned)
-# colnames(tax_table(mo.dataPruned)) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus")
-# rank_names(mo.dataPruned)
 rank_names(mo.data)
 colnames(tax_table(mo.data)) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus")
 rank_names(mo.data)
 
 # full phyloseq object that combines the tax data from mothur with the coculture data
-# all.data <- merge_phyloseq(mo.dataPruned, sam.data)
 all.data <- merge_phyloseq(mo.data, sam.data)
 
 #### Classify Isolates as Pure or Mixed Cultures ####

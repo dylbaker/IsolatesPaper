@@ -178,20 +178,19 @@ sel_D31
 
 #### Natural Community Plot ####
 #Special case can't be handled by plot abundance function
-nat_comm_D0 <- genus_data_D3 %>%
-  # agg_Genus_data_D3 %>% 
-  #Filter out reads below the detection limit that are not part of our isolate collection
-  # group_by(Genus, host_species) %>%
-  # summarize(avg_rel_abund = mean(agg_rel_abund)) %>% #Take average of all the groups for one host species
-  # ungroup() %>%
+nat_comm_D0 <- pondTax %>%
+  # filter(time == "D3")%>%
+  group_by(otu, host_species)%>%
+  mutate(agg_rel_abund = sum(rel_abund),
+         avg_rel_abund = mean(rel_abund))%>%
+  ungroup()%>%
   filter(!(avg_rel_abund < 10e-4))%>%
-  # filter(!(avg_rel_abund < 10e-4) | Genus %in% Phycosphere_GRBC_D3$Genus) %>%
-  # mutate(time = "D3")  %>% 
-  # mutate(host_species = factor(host_species, levels = c("Chlorella", "Coelastrum", "Scenedesmus", "Monoraphidium", "Selenastrum", "Natural Community")), 
-  # Genus = reorder_within(Genus, -avg_rel_abund, host_species)) %>%
-  filter(host_species == "Natural Community") %>%
+  mutate(host_species = ifelse(host_species == "naturalCommunity", "Natural Community", NA))%>%
+  filter(host_species == "Natural Community")%>%
+  slice(1:60)%>%
   #Reorder Genus by average relative abundance to get a smooth curve
-  ggplot(aes(x = reorder(Genus, -avg_rel_abund), 
+  ggplot(aes(x = reorder(otu, -avg_rel_abund), 
+  # ggplot(aes(x = reorder(Genus, -avg_rel_abund), 
              y = avg_rel_abund, 
              fill = host_species)) +
   geom_bar(stat = "Identity") +
@@ -236,22 +235,21 @@ patchwork +
     axis.text.x = element_text(size = 10)
   )
 
-ggsave(filename = "fig1_rewrite.png",  dpi = 300, path = "./fig1", width = 14, height = 24)
-
-# ggsave(filename = "Isolates D3-D31 Phycosphere Comparison.pdf",  dpi = 300, path = "./fig1", width = 14, height = 18)
+ggsave(filename = "fig1_rewrite.pdf",  dpi = 300, path = "./fig1", width = 14, height = 24)
 
 #### Percentage of Phycosphere OTUs Isolated ####
 
-grbc_genera <- GRBC_tax %>%
+grbc_genera <- collectionTax %>%
   select(Genus, host_species)%>% # Genus,
   distinct()%>%
   mutate(isolated = T)
 
-phyc_genera <- Phycosphere_tax %>% select(otu, Genus) %>% distinct()
+phyc_genera <- phycosphereTax %>% select(otu, Genus) %>% distinct()
 
-percentage_isolated <- Phycosphere_otu_count%>%
-  # filter(host_species != "Natural Community")%>%
-  left_join(., phyc_genera)%>%
+
+## Calculates the percentage of genera isolated for each algal host
+### excludes genera that with relative abundance less that 10^-5
+percentage_isolated <- phycosphereTax%>%
   filter(rel_abund >= 1e-5)%>%
   select(Genus, host_species)%>%
   distinct()%>%
