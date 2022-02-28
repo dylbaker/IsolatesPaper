@@ -183,8 +183,11 @@ bar_chart <- afhData_all%>%
   ggplot(., aes(x = algalSpecies, y = aucLogNorm_mean, fill = Effect, color = afh))+
   geom_bar(stat = "identity")+
   geom_errorbar(aes(ymin = aucLogNorm_mean-(2*aucLogNorm_sd), ymax = aucLogNorm_mean+(2*aucLogNorm_sd)))+
-  facet_wrap(vars(facet_title))
+  facet_wrap(vars(collectionCode))
+  # facet_wrap(vars(facet_title))
 bar_chart
+### NOTE: using facet_title as the facet var will group by assigned genus
+### using collectionCode will group by isolate number
 
 ggsave("./fig3/barChart.pdf", plot = bar_chart, device = "pdf",
        scale = 1, width = 16, height = 8, dpi = 300, units = "in", limitsize = TRUE)
@@ -204,10 +207,12 @@ line_plot <- afhData_all%>%
   geom_hline(yintercept = 0)+
   # geom_point()+
   geom_smooth(alpha = 0)+
-  facet_wrap(vars(facet_title))+
+  # facet_wrap(vars(facet_title))+
+  facet_wrap(vars(collectionCode))+
   scale_color_manual(values = colors$color)
-  # facet_wrap(vars(collectionCode))
 line_plot
+### NOTE: using facet_title as the facet var will group by assigned genus
+### using collectionCode will group by isolate number
 
 ggsave("./fig3/linePlot_geomSmooth.pdf", plot = line_plot, device = "pdf",
        scale = 1, width = 16, height = 8, dpi = 300, units = "in", limitsize = TRUE)
