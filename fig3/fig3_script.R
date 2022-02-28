@@ -180,10 +180,11 @@ bar_chart <- afhData_all%>%
          aucLogNorm_mean, aucLogNorm_sd)%>%
   distinct()%>%
   left_join(., tTestData)%>%
-  ggplot(., aes(x = algalSpecies, y = aucLogNorm_mean, fill = Effect, color = afh))+
+  # ggplot(., aes(x = algalSpecies, y = aucLogNorm_mean, fill = Effect, color = afh))+
+  ggplot(., aes(x = algalSpecies, y = aucLogNorm_mean, fill = afh))+ ## use this for native/non-native fill
   geom_bar(stat = "identity")+
-  geom_errorbar(aes(ymin = aucLogNorm_mean-(2*aucLogNorm_sd), ymax = aucLogNorm_mean+(2*aucLogNorm_sd)))+
-  ylim(-0.5, 1)+ ## Sets scale limits
+  geom_errorbar(aes(ymin = aucLogNorm_mean-(2*(aucLogNorm_sd/sqrt(3))), ymax = aucLogNorm_mean+((2*aucLogNorm_sd/sqrt(3)))))+ ## error bars are currently 2* std dev, to make std error divide by sqrt # of sample size (3)
+  # ylim(-0.5, 1)+ ## Sets scale limits
   coord_flip()+ ## Flips coordinates to make axes more readable
   facet_wrap(vars(collectionCode))
   # facet_wrap(vars(facet_title))
