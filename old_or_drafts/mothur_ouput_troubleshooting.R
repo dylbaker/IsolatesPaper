@@ -1,5 +1,12 @@
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("phyloseq")
+
+
 library(tidyverse)
 library(phyloseq)
+library(ape)
 
 #### Read in Mothur Outputs and Combine with Coculture Data and Stats ####
 # Define mothur outputs
@@ -15,23 +22,23 @@ library(phyloseq)
 # shared.file <- "./raw_data/mothur_outputs/final.an.shared"
 # tree.file <- "./raw_data/mothur_outputs/final.an.unique.rep.otuRename.phylip.tre"
 
-list.file <- "./raw_data/mothur_outputs/final.opti_mcc.list"
-constax.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.cons.taxonomy"
-shared.file <- "./raw_data/mothur_outputs/final.opti_mcc.shared"
+# list.file <- "./raw_data/mothur_outputs/final.opti_mcc.list"
+# constax.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.cons.taxonomy"
+# shared.file <- "./raw_data/mothur_outputs/final.opti_mcc.shared"
 # tree.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.rep.otuRename.phylip.tre"
 
-tree.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.rep.otuRename.tree.nwk"
-
+####Newest outputs from mothur 10/19/22
+fasttree <- "./mothur_outputs/GRBC_seqs/final.asvRename.rep.tree.nwk"
+clearcut <- "./mothur_outputs/GRBC_seqs/final.an.rep.asvRename.phylip.tre"
+constax.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.ASV.cons.taxonomy"
+shared.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.shared"
+list.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.list"
 
 # Read mothur outputs into phyloseq/R
-mo.data <- import_mothur(mothur_list_file = list.file,
-                         mothur_constaxonomy_file = constax.file,
-                         mothur_shared_file = shared.file)
-                         # ,
-                         # mothur_tree_file = tree.file)
-
-
-
+mo.data <- import_mothur(mothur_constaxonomy_file = constax.file,
+                         mothur_shared_file = shared.file,
+                         mothur_list_file = list.file,
+                         mothur_tree_file = fasttree)
 # Convert stats data into phyloseq sample data (syntax of Isolate names changed to match mothur sample name syntax)
 sam.data <- stats_meanCoefs %>%
   mutate(Isolate = str_replace(Isolate, ",", "sep"),
@@ -55,10 +62,10 @@ rank_names(mo.data)
 all.data <- merge_phyloseq(mo.data, sam.data)
 
 #### Classify Isolates as Pure or Mixed Cultures ####
-taxTable <- as.data.frame(all.data@tax_table)%>%
+taxTable <- as.data.frame(mo.data@tax_table)%>%
   rownames_to_column(., var = "otu")
 
-otuTable <- as.data.frame(all.data@otu_table)%>%
+otuTable <- as.data.frame(mo.data@otu_table)%>%
   rownames_to_column(., var = "otu")%>%
   pivot_longer(!otu, names_to = "Isolate", values_to = "count")%>%
   filter(count != 0)%>%
@@ -68,7 +75,7 @@ otuTable <- as.data.frame(all.data@otu_table)%>%
   ungroup()
 
 isolateTax <- otuTable %>%
-  mutate(contamFlag = ifelse(count <= 0.05*totalReads, T, F))%>%
+  mutate(contamFlag = ifelse(count <= 0.1*totalReads, T, F))%>%
   ## This filter pulls out only sample data (removes control, background, and pond OTUs)
   filter(contamFlag == F, str_detect(.$Isolate, "^[:digit:]|^S|^_"))%>% 
   # distinct()%>% ## not needed
@@ -76,16 +83,11 @@ isolateTax <- otuTable %>%
   mutate(numOTUs = n(),
          mixed = ifelse(numOTUs > 1, T, F),
          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","),
-         Isolate = str_replace(Isolate, "sep", ""))%>%
-  # ,
-  # ## This ifelse() removes "_" from the beginning of some sample names
-  #          Isolate = ifelse(str_detect(Isolate, "^_") == T,
-  #                           str_extract(Isolate, "(\\d+)(_|)D."),
-  # ## some samples used a different naming convention ("S" means "DF")
-  # ## This ifelse() changes these sample names to be uniform
-  #                           ifelse(str_detect(Isolate, "^S") == T,
-  #                                  paste(str_extract(Isolate, "(\\d+)"),
-  #                                        "DF", sep = ""), Isolate)),
+         Isolate = 
+  ## some samples used a different naming convention ("S" means "DF")
+                            ifelse(str_detect(Isolate, "^S") == T,
+                                   paste(str_extract(Isolate, "(\\d+[A-Z]+)"),
+                                         "D31", sep = "_"), Isolate))%>%
   # ## This ifelse removes mothur naming syntax and reverts Isolate names back to coculture naming conventions (removes underscores mainly)
   #          Isolate = ifelse(str_detect(Isolate, "\\d_D") == T,
 #                           str_replace(Isolate, "_", ""),
