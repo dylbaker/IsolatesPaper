@@ -8,7 +8,8 @@ colors <- read.csv("./csv_files/colors.csv")%>%
   mutate(host_species = str_to_lower(hostLong))%>%
   select(host_species, color)
 
-tax <- read.csv("./csv_files/collection_tax_data.csv")
+tax <- read.csv("./csv_files/collection_tax_data.csv") %>%
+  arrange(., "Genus", desc = T)
 
 stats_normCoefs <- read.csv("./csv_files/logistic_mod_stats_normCoefs.csv")%>%
   mutate(Isolate = ifelse(str_detect(Isolate, "\\.") == T,
@@ -55,6 +56,7 @@ ccPlot_facet <- stats_normCoefs %>%
        # y = "Bacterial Family",
        # title = "Family Level Impact on Algal Carrying Capacity")+ ## family
   facet_grid(vars(host_species), scales = "free_y")+
+  theme_minimal() +
   scale_color_manual(values = colors$color)
 ccPlot_facet
 

@@ -2,11 +2,14 @@ if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
 BiocManager::install("phyloseq")
+#install.packages("remotes")
+#remotes::install_github("vmikk/metagMisc")
 
 
 library(tidyverse)
 library(phyloseq)
 library(ape)
+#library(metagMisc)
 
 #### Read in Mothur Outputs and Combine with Coculture Data and Stats ####
 # Define mothur outputs
@@ -39,32 +42,11 @@ mo.data <- import_mothur(mothur_constaxonomy_file = constax.file,
                          mothur_shared_file = shared.file,
                          mothur_list_file = list.file,
                          mothur_tree_file = fasttree)
-# Convert stats data into phyloseq sample data (syntax of Isolate names changed to match mothur sample name syntax)
-sam.data <- stats_meanCoefs %>%
-  mutate(Isolate = str_replace(Isolate, ",", "sep"),
-         Isolate = str_replace(Isolate, "(?<!sep\\d)D", "sepD"))%>%
-  column_to_rownames(var = "Isolate")%>%
-  sample_data(.)
-
-# verify that sample names match (there will be more samples in mo.data, because we included environmental samples in our analysis) - most important here is that syntax is the same (underscores between number and day, ex: 23D3 becomes 23_D3, 30,1DF becomes 30_1DF)
-sample_names(mo.data)
-sample_names(sam.data)
-
 # change taxonomic "rank names" to recognizable classifications (rank 1-7 to KPCOFGS)
 rank_names(mo.data)
 colnames(tax_table(mo.data)) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus")
 rank_names(mo.data)
-
-# plot a test tree using the mothur data (not needed right here)
-# plot_tree(mo.data, "treeonly", ladderize = T)
-
-# full phyloseq object that combines the tax data from mothur with the coculture data
-all.data <- merge_phyloseq(mo.data, sam.data)
-
-#### Classify Isolates as Pure or Mixed Cultures ####
-taxTable <- as.data.frame(mo.data@tax_table)%>%
-  rownames_to_column(., var = "otu")
-
+#Change sample names to desired ones.
 otuTable <- as.data.frame(mo.data@otu_table)%>%
   rownames_to_column(., var = "otu")%>%
   pivot_longer(!otu, names_to = "Isolate", values_to = "count")%>%
@@ -73,21 +55,71 @@ otuTable <- as.data.frame(mo.data@otu_table)%>%
   mutate(totalReads = sum(count),
          otuMatches = n())%>%
   ungroup()
+sample_names <- as_tibble(unique(otuTable$Isolate)) %>%
+  mutate(Isolate = ifelse(str_detect(value, "^S"),
+                          paste(str_extract(value, "([A-Z0-9]+)"),"D31", sep = "_"), value),
+         Isolate = str_replace(Isolate, "^S",""),
+         Isolate = str_replace(Isolate, "F","31"),
+         Isolate = str_replace(Isolate, "point", "_"))
 
-isolateTax <- otuTable %>%
+# Convert stats data into phyloseq sample data (syntax of Isolate names changed to match mothur sample name syntax)
+sam.data <- sample_names %>%
+  column_to_rownames(var = "value")%>%
+  sample_data(.)
+# full phyloseq object that combines the tax data from mothur with the coculture data
+all.data <- merge_phyloseq(mo.data, sam.data)
+rel_abund <- transform_sample_counts(all.data, function(x) x /sum(x)) %>%
+  filter_taxa(., function(x) sum(x) > .05, TRUE)
+sample_names(all.data) <- all.data@sam_data[["value"]]
+sample_names(all.data) <- sample_data(all.data)$Isolate
+
+# Agglomerate similar taxa
+tip_glom <- tip_glom(all.data, h = 0.1) #Cluster based on cophenetic distances of <0.2
+genus_glom <- tax_glom(all.data, taxrank = rank_names(mo.data)[6])
+
+
+
+# verify that sample names match (there will be more samples in mo.data, because we included environmental samples in our analysis) - most important here is that syntax is the same (underscores between number and day, ex: 23D3 becomes 23_D3, 30,1DF becomes 30_1DF)
+sample_names(mo.data) <- sample_names[2]
+sample_names(sam.data)
+
+
+# plot a test tree using the mothur data (not needed right here)
+#plot_tree(mo.data, "treeonly", ladderize = T)
+phylum.tree <- plot_tree(rel_abund, 
+                         label.tips="Genus", 
+                         ladderize = "left",
+                         color = "Phylum")
+order.tree <- plot_tree(rel_abund, 
+                         label.tips="Genus", 
+                         ladderize = "left",
+                         color = "Order")
+plot_tree(tip_glom(mo.data, h=0.2),label.tips="taxa_names", size="abundance", title="After tip_glom()")
+
+
+#### Classify Isolates as Pure or Mixed Cultures ####
+taxTable <- as.data.frame(all.data@tax_table)%>%
+  rownames_to_column(., var = "otu")
+genustaxTable <- as.data.frame(genus_glom@tax_table) %>%
+  rownames_to_column(., var = "otu")
+genusotuTable <- as.data.frame(genus_glom@otu_table)%>%
+  rownames_to_column(., var = "otu")%>%
+  pivot_longer(!otu, names_to = "Isolate", values_to = "count")%>%
+  filter(count != 0)%>%
+  group_by(Isolate)%>%
+  mutate(totalReads = sum(count),
+         otuMatches = n())%>%
+  ungroup()
+isolateTax <- genusotuTable %>%
   mutate(contamFlag = ifelse(count <= 0.1*totalReads, T, F))%>%
-  ## This filter pulls out only sample data (removes control, background, and pond OTUs)
-  filter(contamFlag == F, str_detect(.$Isolate, "^[:digit:]|^S|^_"))%>% 
-  # distinct()%>% ## not needed
+  filter(contamFlag == F) %>%
   group_by(Isolate)%>%
   mutate(numOTUs = n(),
          mixed = ifelse(numOTUs > 1, T, F),
-         Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","),
-         Isolate = 
-  ## some samples used a different naming convention ("S" means "DF")
-                            ifelse(str_detect(Isolate, "^S") == T,
-                                   paste(str_extract(Isolate, "(\\d+[A-Z]+)"),
-                                         "D31", sep = "_"), Isolate))%>%
+         Isolate = ifelse(str_detect(Isolate, "^S"),
+                                   paste(str_extract(Isolate, "([A-Z0-9]+)"),"D31", sep = "_"), Isolate),
+         Isolate = str_replace(Isolate, "^S",""),
+         Isolate = str_replace(Isolate, "F","31"))%>%
   # ## This ifelse removes mothur naming syntax and reverts Isolate names back to coculture naming conventions (removes underscores mainly)
   #          Isolate = ifelse(str_detect(Isolate, "\\d_D") == T,
 #                           str_replace(Isolate, "_", ""),
@@ -164,7 +196,7 @@ otu_in_isolate <- select(otu_df, otu) %>%
 
 pruned.data <- prune_taxa(otu_in_isolate, all.data)
 
-pruned.tree <- plot_tree(pruned.data, label.tips="taxa_names", ladderize="left", color="Class")
+pruned.tree <- plot_tree(pruned.data, label.tips="taxa_names", ladderize="left", color="Phylum")
 pruned.tree
 
 pruned.treeGR <- plot_tree(pruned.data, ladderize = T, color = "grEffect", justify = "left")
