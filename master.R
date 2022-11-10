@@ -2,11 +2,6 @@
 
 ## This script pulls plate reader data and mothur outputs into R and combines them to make a variety of data files used to build figures
 
-#### Directory Set ####
-
-setwd("C:/Users/jlaue/OneDrive/Documents/Denef_Lab_Stuff/IsolatesPaper/")
-getwd()
-
 #### Libraries ####
 
 ## Definitely Needed
@@ -39,9 +34,9 @@ library(outliers)
 #### Functions ####
 ## For Data Processing
 read_plate <- function(plate_list) {
-  read_csv(plate_list, show_col_types = F)%>%
+  read_csv(plate_list, show_col_types = F)|>
     rename(ChlA_100 = `Mean RFU [ChlA_100:460,685]`, 
-           read_time = `Reading Date/Time`)%>%
+           read_time = `Reading Date/Time`)|>
     #Extract plate information and species from each file to aid in isolate mapping.
     mutate(plate_no = str_extract(str_extract(plate_list,
                                               pattern = "Plate_(\\d\\d|\\d)"),
@@ -53,19 +48,19 @@ read_plate <- function(plate_list) {
                                               pattern = "(\\d\\d|\\d).csv"),
                                   pattern = regex("(\\d\\d|\\d)")),
            read_time = as.POSIXct(read_time, 
-                                  format = "%Y-%m-%d %H:%M:%S")) %>%
+                                  format = "%Y-%m-%d %H:%M:%S")) |>
     select(Well, ChlA_100, read_time, read_day, plate_no, host_species)
 }
 
 read_map <- function(map_list) {
-  read_csv(map_list, col_types = cols(.default = col_character())) %>%
+  read_csv(map_list, col_types = cols(.default = col_character())) |>
     mutate(Isolate = as.character(Isolate),
            plate_no = str_extract(str_extract(map_list,
                                               pattern = "Plate_(\\d\\d|\\d)"),
                                   pattern = regex("(\\d\\d|\\d)")), 
            host_species = str_extract(map_list,
                                       pattern = "(chlorella|coelastrum|scenedesmus|monoraphidium|selenastrum)"),
-           filename = map_list) %>%
+           filename = map_list) |>
     select(-filename)
 }
 
@@ -75,15 +70,15 @@ grubbs <- function(df){
   data_grubbs <- split(df, df$host_species)
   for(i in 1:length(data_grubbs)){
     x <- data_grubbs[[i]]
-    data_grubbs[[i]] <- x %>%
+    data_grubbs[[i]] <- x |>
       mutate(p_high = grubbs.test(x$asymptote, type = 10)[[3]],
              p_low = grubbs.test(x$asymptote, type = 10, opposite = T)[[3]],
              maxVal = max(x$asymptote),
              minVal = min(x$asymptote),
              outlier = ifelse(p_high <= 0.05 & maxVal == asymptote, T,
                               ifelse(p_low <= 0.05 & minVal == asymptote, T, F)))
-    # %>%
-    #   filter(outlier == F)%>%
+    # |>
+    #   filter(outlier == F)|>
     #   mutate(p_high = grubbs.test(x$asymptote, type = 10)[[3]],
     #          p_low = grubbs.test(x$asymptote, type = 10, opposite = T)[[3]],
     #          maxVal = max(x$asymptote),
@@ -91,17 +86,17 @@ grubbs <- function(df){
     #          outlier = ifelse(p_high <= 0.05 & maxVal == asymptote, T,
     #                           ifelse(p_low <= 0.05 & minVal == asymptote, T, F)))
   }
-  df_final <- bind_rows(data_grubbs)%>%
+  df_final <- bind_rows(data_grubbs)|>
     select(-p_high, -p_low, -maxVal, -minVal)
   return(df_final)
 }
 
 
 #### Set Up Colors ####
-color_df <- data.frame(hostLong = c("chlorella", "coelastrum", "monoraphidium",
-                                    "scenedesmus", "selenastrum"),
+color_df <- data.frame(hostLong = c("chlorella", "coelastrum", "scenedesmus",
+                                    "monoraphidium", "selenastrum"),
                        hostShort = c("CS", "CM", "MM", "SA", "SC"),
-                       color = c("#f8766d", "#a3a500", "#00bf7d", "#00b0f6", "#e76bf3"))
+                       color = c("#7FC97F", "#BEAED4", "#E0115F", "#FDC086", "#386CB0"))
 #### Read in Plate Reader Data and Combine with Plate Maps ####
 ## Plate Reader Data
 folder_list <- list.dirs(path = "./raw_data", full.names = TRUE, recursive = FALSE) %>%
@@ -125,22 +120,22 @@ map_data_all <- map_df(map_list, ~read_map(.))
 
 ## Combine Plate and Plate Map Data
 data <- inner_join(plate_data_all, map_data_all,
-                   by = c("Well", "plate_no", "host_species"))%>%
+                   by = c("Well", "plate_no", "host_species"))|>
   mutate(exact_isolate = paste("Plate", plate_no, Isolate, Well, sep = "_"),
          Day_isolated = ifelse(str_detect(Isolate, "D3")==TRUE, "D3",
-                               ifelse(str_detect(Isolate, "DF")==TRUE, "D31", "Ctrl")))%>%
-  group_by(exact_isolate)%>%
+                               ifelse(str_detect(Isolate, "DF")==TRUE, "D31", "Ctrl")))|>
+  group_by(exact_isolate)|>
   mutate(begin = min(read_time),
          read_interval = begin %--% read_time,
-         read_timeHours = as.numeric(as.duration((read_interval)/dhours(1))))%>%
-  select(-begin)%>%
-  group_by(plate_no, Isolate, read_day)%>%
+         read_timeHours = as.numeric(as.duration((read_interval)/dhours(1))))|>
+  select(-begin)|>
+  group_by(plate_no, Isolate, read_day)|>
   mutate(day_mean = mean(ChlA_100, na.rm=TRUE),
-         day_sd = sd(ChlA_100, na.rm=TRUE))%>%
-  ungroup()%>%
+         day_sd = sd(ChlA_100, na.rm=TRUE))|>
+  ungroup()|>
 # This chunk flags outliers - defined as any point more than 2 std. dev. from day mean
   mutate(Outlier = ifelse((day_mean-(2*day_sd))>ChlA_100|(day_mean+(2*day_sd))<ChlA_100,
-                          TRUE, FALSE))%>%
+                          TRUE, FALSE))|>
   select(Well, host_species, plate_no, Day_isolated, 
          Isolate, exact_isolate, read_day, read_time,
          read_timeHours, ChlA_100, day_mean, day_sd, Outlier)
@@ -152,21 +147,21 @@ algal_species <- unique(data$host_species)
 data_flagged <- as.list(1:length(algal_species))
 for(i in 1:length(algal_species)){
   host <- algal_species[i]
-  host_data <- data %>% filter(host_species == host)
-  AC_day0_avg <- filter(host_data, Isolate == "AC" & read_day == 0)%>%
-    summarise(ChlA_100_mean = mean(ChlA_100))%>%
+  host_data <- data |> filter(host_species == host)
+  AC_day0_avg <- filter(host_data, Isolate == "AC" & read_day == 0)|>
+    summarise(ChlA_100_mean = mean(ChlA_100))|>
     as.numeric()
-  flags <- filter(host_data, read_day == 0)%>%
-    mutate(algae_flag = ifelse(ChlA_100 > 2*AC_day0_avg, T, F))%>%
-    select(Isolate, algae_flag)%>%
+  flags <- filter(host_data, read_day == 0)|>
+    mutate(algae_flag = ifelse(ChlA_100 > 2*AC_day0_avg, T, F))|>
+    select(Isolate, algae_flag)|>
     distinct()
   data_flagged[[i]] <- left_join(host_data, flags)
 }
 
-data_split <- bind_rows(data_flagged) %>%
-  mutate(Day_isolated = ifelse(Isolate == "AC", "AC", Day_isolated))%>%
+data_split <- bind_rows(data_flagged) |>
+  mutate(Day_isolated = ifelse(Isolate == "AC", "AC", Day_isolated))|>
   filter(algae_flag != T,
-         Day_isolated != "Ctrl")%>%
+         Day_isolated != "Ctrl") %>%
   split(., .$exact_isolate)
 
 coefList <- foreach(i = 1:length(data_split), .packages = "tidyverse") %dopar%{
@@ -194,15 +189,15 @@ coefList <- foreach(i = 1:length(data_split), .packages = "tidyverse") %dopar%{
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
 
-iKey <- data %>%
-  select(exact_isolate, Isolate, host_species, plate_no)%>%
+iKey <- data |>
+  select(exact_isolate, Isolate, host_species, plate_no)|>
   distinct()
 
-coefs <- bind_rows(coefList)%>%
-  left_join(., iKey)%>%
+coefs <- bind_rows(coefList)|>
+  left_join(iKey)|>
   ungroup()
 
-ACcoefs <- coefs %>% filter(Isolate == "AC")
+ACcoefs <- coefs |> filter(Isolate == "AC")
 coefList_4t <- split(coefs, coefs$Isolate)
 
 statsList <- foreach(i = 1:length(coefList_4t), .packages = c("tidyverse", "broom")) %dopar%{
@@ -211,38 +206,38 @@ statsList <- foreach(i = 1:length(coefList_4t), .packages = c("tidyverse", "broo
     host <- unique(tt_df$host_species)
     plate <- unique(tt_df$plate_no)
     Isolate <- unique(tt_df$Isolate)
-    ac_df <- ACcoefs %>% filter(host_species == host & plate_no == plate)
+    ac_df <- ACcoefs |> filter(host_species == host & plate_no == plate)
     cc_greater <- tidy(t.test(tt_df$asymptote, 
                               ac_df$asymptote, 
-                              alternative = "greater"))%>%
-      mutate(pCC_greater = p.value, Isolate = Isolate)%>%
+                              alternative = "greater"))|>
+      mutate(pCC_greater = p.value, Isolate = Isolate)|>
       select(pCC_greater, Isolate)
     cc_less <- tidy(t.test(tt_df$asymptote, 
                            ac_df$asymptote, 
-                           alternative = "less"))%>%
-      mutate(pCC_less = p.value, Isolate = Isolate)%>%
+                           alternative = "less"))|>
+      mutate(pCC_less = p.value, Isolate = Isolate)|>
       select(pCC_less, Isolate)
     gr_greater <- tidy(t.test(tt_df$growthParam, 
                               ac_df$growthParam, 
-                              alternative = "greater"))%>%
-      mutate(pGR_greater = p.value, Isolate = Isolate)%>%
+                              alternative = "greater"))|>
+      mutate(pGR_greater = p.value, Isolate = Isolate)|>
       select(pGR_greater, Isolate)
     gr_less <- tidy(t.test(tt_df$growthParam, 
                            ac_df$growthParam, 
-                           alternative = "less"))%>%
-      mutate(pGR_less = p.value, Isolate = Isolate)%>%
+                           alternative = "less"))|>
+      mutate(pGR_less = p.value, Isolate = Isolate)|>
       select(pGR_less, Isolate)
     cc_stat <- full_join(cc_greater, cc_less)
     gr_stat <- full_join(gr_greater, gr_less)
-    stats_df <- full_join(cc_stat, gr_stat)%>%
+    stats_df <- full_join(cc_stat, gr_stat)|>
       mutate(plate_no = plate,
              host_species = host)
     return(stats_df)
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
 
-stats <- bind_rows(statsList)%>%
-  select(Isolate, host_species, plate_no, pCC_greater, pCC_less, pGR_greater, pGR_less)%>%
+stats <- bind_rows(statsList)|>
+  select(Isolate, host_species, plate_no, pCC_greater, pCC_less, pGR_greater, pGR_less)|>
   mutate(ccEffect = ifelse(pCC_greater <= 0.05 & pCC_less > 0.05, "Increased CC",
                            ifelse(pCC_greater > 0.05 & pCC_less <= 0.05, "Decreased CC",
                                   ifelse(pCC_greater > 0.05 & pCC_less > 0.05,
@@ -253,38 +248,38 @@ stats <- bind_rows(statsList)%>%
                                          "No Significant GR Change", "Error"))),
          annotation = paste(ccEffect, grEffect, sep = "\n"))
 
-stats_coefs <- full_join(stats, coefs)%>%
+stats_coefs <- full_join(stats, coefs)|>
   grubbs() # This test added here when normalization was added 01/19/2022 -JL
 
 #### Normalization of Plate Reader Data to Axenic Controls ####
-ac_coefs <- stats_coefs %>% 
-  filter(Isolate == "AC" & outlier != T)%>%
-  group_by(host_species, plate_no)%>%
+ac_coefs <- stats_coefs |> 
+  filter(Isolate == "AC" & outlier != T)|>
+  group_by(host_species, plate_no)|>
   mutate(nSamples = n(),
          meanCC = mean(asymptote),
-         meanGR = mean(growthParam))%>%
-  ungroup()%>%
+         meanGR = mean(growthParam))|>
+  ungroup()|>
   # These columns are empty, as there is no statistics data for axenic controls samples
   select(-pCC_greater, -pCC_less, -pGR_greater, -pGR_less,
          -ccEffect, -grEffect, -annotation)
 # running grubbs() again doesnt make much sense to me
-# %>%grubbs()
+# |>grubbs()
 
-stats_coefs_split <- stats_coefs %>%
-  filter(Isolate != "AC" & Isolate != "MC")%>%
+stats_coefs_split <- stats_coefs |>
+  filter(Isolate != "AC" & Isolate != "MC")|>
   mutate(split_var = paste(Isolate, plate_no, sep = "_"))%>%
   split(., .$split_var)
 for(i in 1:length(stats_coefs_split)){
   df <- stats_coefs_split[[i]]
   plate <- unique(df$plate_no)
   host <- unique(df$host_species)
-  ac <- ac_coefs %>%
-    filter(host_species == host & plate_no == plate & asymptote >= 0)%>%
+  ac <- ac_coefs |>
+    filter(host_species == host & plate_no == plate & asymptote >= 0)|>
     summarize(acCC = mean(asymptote),
               acGR = mean(growthParam))
   acCC <- as.numeric(ac$acCC)
   acGR <- as.numeric(ac$acGR)
-  stats_coefs_split[[i]] <- df %>%
+  stats_coefs_split[[i]] <- df |>
     mutate(normCC = asymptote/acCC,
            normGR = growthParam/acGR,
            logNormCC = log(normCC),
@@ -293,33 +288,33 @@ for(i in 1:length(stats_coefs_split)){
 stats_normCoefs <- bind_rows(stats_coefs_split)
 
 #### Calculate Triplicate Mean of Stats Coefficients ####
-stats_meanCoefs <- coefs %>%
-  group_by(Isolate, host_species, plate_no)%>%
-  mutate(n = n())%>%
+stats_meanCoefs <- coefs |>
+  group_by(Isolate, host_species, plate_no)|>
+  mutate(n = n())|>
   summarize(meanCC = mean(asymptote),
             seCC = sd(asymptote)/sqrt(n),
             meanGR = mean(growthParam),
-            seGR = sd(growthParam)/sqrt(n))%>%
+            seGR = sd(growthParam)/sqrt(n))|>
   # NOTE: need to write in normalization code --> figure this out Tuesday
             # ,
             # mean_normCC = mean(normCC),
             # mean_normGR = mean(normGR),
             # mean_logNormCC = mean(logNormCC),
-            # mean_logNormGR = mean(logNormGR))%>%
-  distinct()%>%
-  left_join(stats, .)
+            # mean_logNormGR = mean(logNormGR))|>
+  distinct()|>
+  right_join(stats)
 # full_join(stats, .) # keeps AC and other problem isolates (things that got rmvd from stats)
-# %>% drop_na() # removes outliers and includes only the isolates included in the stats df
+# |> drop_na() # removes outliers and includes only the isolates included in the stats df
 # "probs" contains everything that is removed by the use of left_join() -or- drop_na()
 # probs <- filter(stats_meanCoefs, (Isolate =="105D3"|Isolate =="114D3"|Isolate =="129D3"|Isolate =="199,1D3"|Isolate =="224D3"|Isolate =="94D3"|Isolate =="96D3"|Isolate =="AC"))
 
 #### Read in Mothur Outputs and Combine with Coculture Data and Stats ####
 # Define mothur outputs
-list.file <- "./raw_data/mothur_outputs/final.an.list"
-constax.file <- "./raw_data/mothur_outputs/final.an.unique.cons.taxonomy"
-shared.file <- "./raw_data/mothur_outputs/final.an.shared"
+list.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.list"
+constax.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.ASV.cons.taxonomy"
+shared.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.shared"
 # Tree using representative sequences from each OTU
-tree.file <- "./raw_data/mothur_outputs/final.an.unique.rep.otuRename.phylip.tre"
+tree.file <- "./mothur_outputs/GRBC_seqs/final.an.rep.asvRename.phylip.tre"
 # Tree that uses isolate names, result of shared.tree() command in mothur --> looks very weird
 # tree.file <- "./raw_data/mothur_outputs/final.an.jclass.unique.tre"
 
@@ -331,57 +326,54 @@ mo.data <- import_mothur(mothur_list_file = list.file,
 tree.data <- read_tree(treefile = tree.file)
 
 # Convert stats data into phyloseq sample data (syntax of Isolate names changed to match mothur sample name syntax)
-sam.dataMiseqNames <- stats_meanCoefs %>%
-  mutate(Isolate = str_replace(Isolate, ",", "sep"),
-         Isolate = str_replace(Isolate, "(?<!sep\\d)D", "sepD"))
+sam.dataMiseqNames <- stats_meanCoefs |>
+  mutate(Isolate = str_replace(Isolate, ",", "point"),
+         seq_type = "Miseq") 
+sam.dataJinny <- stats_meanCoefs |> 
+  filter(str_detect(Isolate, "DF") & host_species == "chlorella") |>
+  #Match up experimental isolates to the ones Jinny Sequenced that are missing
+  mutate(Isolate = case_when(Isolate == "10DF" ~ "S10OMO",
+                             Isolate == "11DF" ~ "S11",
+                             Isolate == "12DF" ~ "S12",
+                             Isolate == "13DF" ~ "S13",
+                             Isolate == "14DF" ~ "S14",
+                             Isolate == "16DF" ~ "S16",
+                             Isolate == "17DF" ~ "S17A",
+                             Isolate == "18DF" ~ "S18",
+                             Isolate == "19DF" ~ "S19AB",
+                             Isolate == "2DF" ~ "S2",
+                             Isolate == "20DF" ~ "S20",
+                             Isolate == "21DF" ~ "S21",
+                             Isolate == "22DF" ~ "S22",
+                             Isolate == "24DF" ~ "S24",
+                             Isolate == "25DF" ~ "S25",
+                             Isolate == "26DF" ~ "S26",
+                             Isolate == "27DF" ~ "S27",
+                             Isolate == "28DF" ~ "S28",
+                             Isolate == "29DF" ~ "S29",
+                             Isolate == "3DF" ~ "S3",
+                             Isolate == "30,1DF" ~ "S30W",
+                             Isolate == "31DF" ~ "S31",
+                             Isolate == "32DF" ~ "S32AB",
+                             Isolate == "33DF" ~ "S33",
+                             Isolate == "34DF" ~ "S34",
+                             Isolate == "31DF" ~ "S31",
+                             Isolate == "5DF" ~ "S5",
+                             Isolate == "6DF" ~ "S6",
+                             Isolate == "7DF" ~ "S7",
+                             Isolate == "8DF" ~ "S8",
+                             Isolate == "9DF" ~ "S9W"
+                             )) |>
+  filter(!is.na(Isolate))
 
-sam.dataSangerNames <- sam.dataMiseqNames %>%
-  mutate(Isolate = paste("_", Isolate, sep=""))
+sam.dataSangerNames <- sam.dataMiseqNames |>
+  mutate(seq_type = "Sanger",
+         Isolate = str_replace(Isolate, "D3", "_D3"))
 
-sam.dataPondNames <- data.frame(Isolate = c("P1sepD0sepR1sep022um", "P1sepD0sepR2sep022um",
-                                            "P1sepD0sepR3sep022um", "P2sepD0sepR1sep022um",
-                                            "P2sepD0sepR2sep022um", "P2sepD0sepR3sep022um",
-                                            "P3sepD0sepR1sep022um", "P3sepD0sepR2sep022um",
-                                            "P3sepD0sepR3sep022um"))%>%
-  mutate(host_species = "naturalCommunity",
-         plate_no = NA,
-         pCC_greater = NA,
-         pCC_less = NA,
-         pGR_greater = NA,
-         pGR_less = NA,
-         ccEffect = NA,
-         grEffect = NA,
-         annotation = NA,
-         meanCC = NA,
-         seCC = NA,
-         meanGR = NA,
-         seGR = NA)
+sam.dataDF <- rbind(sam.dataMiseqNames, sam.dataSangerNames, sam.dataJinny)
 
-sam.dataJarNames <- data.frame(Isolate = str_subset(sample_names(mo.data), "^J"))%>%
-  mutate(host_species = ifelse(str_detect(Isolate, "^J[1:9]") == T, "chlorella",
-                        ifelse(str_detect(Isolate, "^J[10:18]") == T, "coelastrum",
-                        ifelse(str_detect(Isolate, "^J[19:27]") == T, "scenedesmus",
-                        ifelse(str_detect(Isolate, "^J[28:36]") == T, "monoraphidium",
-                        ifelse(str_detect(Isolate, "^J[37:45]") == T, "selenastrum",
-                               "Natural Community"))))),
-         plate_no = NA,
-         pCC_greater = NA,
-         pCC_less = NA,
-         pGR_greater = NA,
-         pGR_less = NA,
-         ccEffect = NA,
-         grEffect = NA,
-         annotation = NA,
-         meanCC = NA,
-         seCC = NA,
-         meanGR = NA,
-         seGR = NA)
-
-sam.dataDF <- rbind(sam.dataMiseqNames, sam.dataSangerNames,
-                    sam.dataPondNames, sam.dataJarNames)
-
-sam.data <- sam.dataDF %>%
-  column_to_rownames(var = "Isolate")%>%
+sam.data <- sam.dataDF |>
+  column_to_rownames(var = "Isolate")|>
   sample_data(.)
 
 # verify that sample names match (there will be more samples in mo.data, because we included environmental samples in our analysis) - most important here is that syntax is the same (underscores between number and day, ex: 23D3 becomes 23_D3, 30,1DF becomes 30_1DF)
@@ -398,45 +390,45 @@ rank_names(mo.data)
 all.data <- merge_phyloseq(mo.data, sam.data)
 
 #### Classify Isolates as Pure or Mixed Cultures ####
-taxTable <- as.data.frame(all.data@tax_table)%>%
-  rownames_to_column(., var = "otu")
+taxTable <- as.data.frame(all.data@tax_table)|>
+  rownames_to_column(var = "asv")
 
-sampleData <- sam.dataDF %>%
+sampleData <- sam.dataDF |>
   mutate(Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","),
          Isolate = str_replace(Isolate, "sep", ""),
-         Isolate = str_replace(Isolate, "_", ""))%>%
+         Isolate = str_replace(Isolate, "_", ""))|>
   distinct()
 
-otuTable <- as.data.frame(all.data@otu_table)%>%
-  rownames_to_column(., var = "otu")%>%
-  pivot_longer(!otu, names_to = "Isolate", values_to = "count")%>%
-  filter(count != 0)%>%
-  group_by(Isolate)%>%
+otuTable <- as.data.frame(all.data@otu_table)|>
+  rownames_to_column(., var = "otu")|>
+  pivot_longer(!otu, names_to = "Isolate", values_to = "count")|>
+  filter(count != 0)|>
+  group_by(Isolate)|>
   mutate(totalReads = sum(count),
          otuMatches = n(),
          readType = ifelse(totalReads == 1, "sanger", "miseq"),
-         contamFlag = ifelse(count <= 0.1*totalReads, T, F))%>% # 10% contam threshold
-         # contamFlag = ifelse(count <= 0.05*totalReads, T, F))%>% #5% contam threshold
+         contamFlag = ifelse(count <= 0.1*totalReads, T, F))|> # 10% contam threshold
+         # contamFlag = ifelse(count <= 0.05*totalReads, T, F))|> #5% contam threshold
   ungroup()
 
-isolateTax <- otuTable %>% 
+isolateTax <- otuTable |> 
 ## This filter pulls out only sample data (removes control, background, and pond OTUs)
-  filter(contamFlag == F, str_detect(.$Isolate, "^[:digit:]|^S|^_"))%>% 
-  # distinct()%>% ## not needed
-  group_by(Isolate)%>%
+  filter(contamFlag == F, str_detect(.$Isolate, "^[:digit:]|^S|^_"))|> 
+  # distinct()|> ## not needed
+  group_by(Isolate)|>
   mutate(numOTUs = n(),
          mixed = ifelse(numOTUs > 1, T, F),
          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
          Isolate = str_replace(Isolate, "sep", ""),
-         Isolate = str_replace(Isolate, "_", ""))%>%
-  left_join(., sampleData)%>%
+         Isolate = str_replace(Isolate, "_", ""))|>
+  left_join(., sampleData)|>
   left_join(., taxTable)
   
 
 #### Pull the Pond Data Only ####
-pondTax <- as.data.frame(all.data@otu_table)%>%
-  rownames_to_column(., var = "otu")%>%
-  pivot_longer(!otu, names_to = "Isolate", values_to = "count")%>%
+pondTax <- as.data.frame(all.data@otu_table)|>
+  rownames_to_column(., var = "otu")|>
+  pivot_longer(!otu, names_to = "Isolate", values_to = "count")|>
   filter(count != 0,
          Isolate == "P1sepD0sepR1sep022um" |
            Isolate == "P1sepD0sepR2sep022um"|
@@ -444,30 +436,30 @@ pondTax <- as.data.frame(all.data@otu_table)%>%
            Isolate == "P2sepD0sepR3sep022um"|
            Isolate == "P3sepD0sepR1sep022um"|
            Isolate == "P3sepD0sepR2sep022um"|
-           Isolate == "P3sepD0sepR3sep022um")%>%
-  group_by(Isolate)%>%
+           Isolate == "P3sepD0sepR3sep022um")|>
+  group_by(Isolate)|>
   mutate(numOTUs = n(),
          mixed = ifelse(numOTUs > 1, T, F),
          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
          Isolate = str_replace(Isolate, "sep", ""),
-         Isolate = str_replace(Isolate, "_", ""))%>%
-  left_join(., sampleData)%>%
+         Isolate = str_replace(Isolate, "_", ""))|>
+  left_join(., sampleData)|>
   left_join(., taxTable)
 
 #### Pull the Phycosphere Data Only ####
 
-phycosphereTax <- as.data.frame(all.data@otu_table)%>%
-  rownames_to_column(., var = "otu")%>%
-  pivot_longer(!otu, names_to = "Isolate", values_to = "count")%>%
+phycosphereTax <- as.data.frame(all.data@otu_table)|>
+  rownames_to_column(., var = "otu")|>
+  pivot_longer(!otu, names_to = "Isolate", values_to = "count")|>
   filter(count != 0,
-         str_detect(Isolate, "^J") == T)%>%
-  group_by(Isolate)%>%
+         str_detect(Isolate, "^J") == T)|>
+  group_by(Isolate)|>
   mutate(numOTUs = n(),
          mixed = ifelse(numOTUs > 1, T, F),
          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
          Isolate = str_replace(Isolate, "sep", ""),
-         Isolate = str_replace(Isolate, "_", ""))%>%
-  left_join(., sampleData)%>%
+         Isolate = str_replace(Isolate, "_", ""))|>
+  left_join(., sampleData)|>
   left_join(., taxTable)
 
 #### Write CSV Files ####
@@ -499,11 +491,11 @@ write.csv(stats_normCoefs, file = "./csv_files/logistic_mod_stats_normCoefs.csv"
 write.csv(isolateTax, file = "./csv_files/collection_tax_data.csv", row.names = F)
 
 ## Save the taxonomic information for only mixed cultures
-mixed_cultures <- isolateTax %>% filter(mixed == T)
+mixed_cultures <- isolateTax |> filter(mixed == T)
 write.csv(mixed_cultures, file = "./csv_files/collection_tax_data_mixedOnly.csv", row.names = F)
 
 ## Save the taxonomic information for only pure cultures
-pure_cultures <- isolateTax %>% filter(mixed == F)
+pure_cultures <- isolateTax |> filter(mixed == F)
 write.csv(pure_cultures, file = "./csv_files/collection_tax_data_pureOnly.csv", row.names = F)
 
 ## Save the taxonomic information for the pond/natural community Data

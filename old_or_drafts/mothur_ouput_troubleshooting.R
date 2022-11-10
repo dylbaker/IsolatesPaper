@@ -1,34 +1,13 @@
-if (!require("BiocManager", quietly = TRUE))
-  install.packages("BiocManager")
+# if (!require("BiocManager", quietly = TRUE))
+#   install.packages("BiocManager")
+# BiocManager::install(version = "3.16")
 
 BiocManager::install("phyloseq")
-#install.packages("remotes")
-#remotes::install_github("vmikk/metagMisc")
 
 
 library(tidyverse)
 library(phyloseq)
 library(ape)
-#library(metagMisc)
-
-#### Read in Mothur Outputs and Combine with Coculture Data and Stats ####
-# Define mothur outputs
-## NOTE: These are the outputs from the old pipeline
-# tree.file <- "./raw_data/mothur_outputs/old_pipeline_outputs/fullTree.phylip.tre"
-# constax.file <- "./raw_data/mothur_outputs/old_pipeline_outputs/fullTree.cons.taxonomy"
-# shared.file <- "./raw_data/mothur_outputs/old_pipeline_outputs/fullTree.an.shared"
-# list.file <- "./raw_data/mothur_outputs/old_pipeline_outputs/fullTree.an.list"
-
-#### NEW MOTHUR OUTPUTS ####
-# list.file <- "./raw_data/mothur_outputs/final.an.list"
-# constax.file <- "./raw_data/mothur_outputs/final.an.0.01.cons.taxonomy"
-# shared.file <- "./raw_data/mothur_outputs/final.an.shared"
-# tree.file <- "./raw_data/mothur_outputs/final.an.unique.rep.otuRename.phylip.tre"
-
-# list.file <- "./raw_data/mothur_outputs/final.opti_mcc.list"
-# constax.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.cons.taxonomy"
-# shared.file <- "./raw_data/mothur_outputs/final.opti_mcc.shared"
-# tree.file <- "./raw_data/mothur_outputs/final.opti_mcc.0.03.rep.otuRename.phylip.tre"
 
 ####Newest outputs from mothur 10/19/22
 fasttree <- "./mothur_outputs/GRBC_seqs/final.asvRename.rep.tree.nwk"
@@ -47,29 +26,29 @@ rank_names(mo.data)
 colnames(tax_table(mo.data)) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus")
 rank_names(mo.data)
 #Change sample names to desired ones.
-otuTable <- as.data.frame(mo.data@otu_table)%>%
-  rownames_to_column(., var = "otu")%>%
-  pivot_longer(!otu, names_to = "Isolate", values_to = "count")%>%
-  filter(count != 0)%>%
-  group_by(Isolate)%>%
+otuTable <- as.data.frame(mo.data@otu_table)|>
+  rownames_to_column(var = "otu")|>
+  pivot_longer(!otu, names_to = "Isolate", values_to = "count")|>
+  filter(count != 0)|>
+  group_by(Isolate)|>
   mutate(totalReads = sum(count),
-         otuMatches = n())%>%
+         otuMatches = n())|>
   ungroup()
-sample_names <- as_tibble(unique(otuTable$Isolate)) %>%
-  mutate(Isolate = ifelse(str_detect(value, "^S"),
-                          paste(str_extract(value, "([A-Z0-9]+)"),"D31", sep = "_"), value),
+sample_names <- as_tibble(unique(otuTable$Isolate)) |>
+  mutate(Isolate = case_when(str_detect(value, "^S") ~ paste(str_extract(value, "([A-Z0-9]+)"),"D31", sep = "_"),
+                             TRUE ~ value),
          Isolate = str_replace(Isolate, "^S",""),
          Isolate = str_replace(Isolate, "F","31"),
          Isolate = str_replace(Isolate, "point", "_"))
 
 # Convert stats data into phyloseq sample data (syntax of Isolate names changed to match mothur sample name syntax)
-sam.data <- sample_names %>%
-  column_to_rownames(var = "value")%>%
-  sample_data(.)
+sam.data <- sample_names |>
+  column_to_rownames(var = "value")|>
+  sample_data()
 # full phyloseq object that combines the tax data from mothur with the coculture data
 all.data <- merge_phyloseq(mo.data, sam.data)
-rel_abund <- transform_sample_counts(all.data, function(x) x /sum(x)) %>%
-  filter_taxa(., function(x) sum(x) > .05, TRUE)
+rel_abund <- transform_sample_counts(all.data, function(x) x /sum(x)) |>
+  filter_taxa(function(x) sum(x) > .05, TRUE)
 sample_names(all.data) <- all.data@sam_data[["value"]]
 sample_names(all.data) <- sample_data(all.data)$Isolate
 
@@ -98,33 +77,33 @@ plot_tree(tip_glom(mo.data, h=0.2),label.tips="taxa_names", size="abundance", ti
 
 
 #### Classify Isolates as Pure or Mixed Cultures ####
-taxTable <- as.data.frame(all.data@tax_table)%>%
+taxTable <- as.data.frame(all.data@tax_table)|>
   rownames_to_column(., var = "otu")
-genustaxTable <- as.data.frame(genus_glom@tax_table) %>%
+genustaxTable <- as.data.frame(genus_glom@tax_table) |>
   rownames_to_column(., var = "otu")
-genusotuTable <- as.data.frame(genus_glom@otu_table)%>%
-  rownames_to_column(., var = "otu")%>%
-  pivot_longer(!otu, names_to = "Isolate", values_to = "count")%>%
-  filter(count != 0)%>%
-  group_by(Isolate)%>%
+genusotuTable <- as.data.frame(genus_glom@otu_table)|>
+  rownames_to_column(., var = "otu")|>
+  pivot_longer(!otu, names_to = "Isolate", values_to = "count")|>
+  filter(count != 0)|>
+  group_by(Isolate)|>
   mutate(totalReads = sum(count),
-         otuMatches = n())%>%
+         otuMatches = n())|>
   ungroup()
-isolateTax <- genusotuTable %>%
-  mutate(contamFlag = ifelse(count <= 0.1*totalReads, T, F))%>%
-  filter(contamFlag == F) %>%
-  group_by(Isolate)%>%
+isolateTax <- genusotuTable |>
+  mutate(contamFlag = ifelse(count <= 0.1*totalReads, T, F))|>
+  filter(contamFlag == F) |>
+  group_by(Isolate)|>
   mutate(numOTUs = n(),
          mixed = ifelse(numOTUs > 1, T, F),
          Isolate = ifelse(str_detect(Isolate, "^S"),
                                    paste(str_extract(Isolate, "([A-Z0-9]+)"),"D31", sep = "_"), Isolate),
          Isolate = str_replace(Isolate, "^S",""),
-         Isolate = str_replace(Isolate, "F","31"))%>%
+         Isolate = str_replace(Isolate, "F","31"))|>
   # ## This ifelse removes mothur naming syntax and reverts Isolate names back to coculture naming conventions (removes underscores mainly)
   #          Isolate = ifelse(str_detect(Isolate, "\\d_D") == T,
 #                           str_replace(Isolate, "_", ""),
 #                           ifelse(str_detect(Isolate, "\\d_\\d") == T,
-#                                  str_replace(Isolate, "_", ","), Isolate)))%>%
+#                                  str_replace(Isolate, "_", ","), Isolate)))|>
 
 left_join(., taxTable)
 
@@ -141,37 +120,37 @@ treeHost
 
 #### Additional Troubleshooting ####
 
-sample_names <- data.frame(names = sample_names(all.data))%>%
+sample_names <- data.frame(names = sample_names(all.data))|>
   mutate(names = str_replace(names, "sep(?=\\d)", "."),
          names = str_replace(names, "sep(?=D)", ""),
          number = str_extract(names, ".+(?=D)"),
-         day = str_extract(names, "D.+"))%>%
+         day = str_extract(names, "D.+"))|>
   distinct()
 
-sample_names_MO <- data.frame(names = sample_names(mo.data))%>%
-  mutate(names = str_replace(names, "sep(?=\\d)", "."),
-         names = str_replace(names, "sep(?=D)", ""),
-         number = str_extract(names, ".+(?=D)"),
-         day = str_extract(names, "D.+"),
-         mo.sample=T)%>%
-  distinct()
-
-sample_names_SAM <- data.frame(names = sample_names(sam.data))%>%
+sample_names_MO <- data.frame(names = sample_names(mo.data))|>
   mutate(names = str_replace(names, "sep(?=\\d)", "."),
          names = str_replace(names, "sep(?=D)", ""),
          number = str_extract(names, ".+(?=D)"),
          day = str_extract(names, "D.+"),
-         co.sample=T)%>%
+         mo.sample=T)|>
   distinct()
 
-sample_names_all <- full_join(sample_names_MO, sample_names_SAM)%>%
-  mutate(both = ifelse(mo.sample == T & co.sample == T, T, F))%>%
-  filter(both == T)%>%
+sample_names_SAM <- data.frame(names = sample_names(sam.data))|>
+  mutate(names = str_replace(names, "sep(?=\\d)", "."),
+         names = str_replace(names, "sep(?=D)", ""),
+         number = str_extract(names, ".+(?=D)"),
+         day = str_extract(names, "D.+"),
+         co.sample=T)|>
   distinct()
 
-how_many_mixed <- select(mixed_cultures, Isolate)%>% distinct()
+sample_names_all <- full_join(sample_names_MO, sample_names_SAM)|>
+  mutate(both = ifelse(mo.sample == T & co.sample == T, T, F))|>
+  filter(both == T)|>
+  distinct()
 
-how_many_pure <- select(isolateTax, Isolate, mixed)%>% distinct()
+how_many_mixed <- select(mixed_cultures, Isolate)|> distinct()
+
+how_many_pure <- select(isolateTax, Isolate, mixed)|> distinct()
 
 numbers_onlyMO <- data.frame(number = as.numeric(unique(sample_names_MO$number))) # 274
 numbers_onlySAM <- data.frame(number = as.numeric(unique(sample_names_SAM$number))) # 285
@@ -180,18 +159,18 @@ numbersAntiMO <- anti_join(numbers_onlyMO, numbers_onlySAM)
 numbersAntiSAM <- anti_join(numbers_onlySAM, numbers_onlyMO)
 
 #### Pruning ####
-otu_df <- as.data.frame(all.data@otu_table) %>%
-  rownames_to_column(., var = "otu") %>%
+otu_df <- as.data.frame(all.data@otu_table) |>
+  rownames_to_column(., var = "otu") |>
   pivot_longer(., cols = 2:250, names_to = "Isolate", values_to = "reads")
 
-not_in_any_isolate <- otu_df %>%
-  group_by(otu) %>%
-  summarize(total_reads = sum(reads)) %>%
+not_in_any_isolate <- otu_df |>
+  group_by(otu) |>
+  summarize(total_reads = sum(reads)) |>
   filter(total_reads == 0)
 
-otu_in_isolate <- select(otu_df, otu) %>%
-  distinct()%>%
-  anti_join(., not_in_any_isolate)%>%
+otu_in_isolate <- select(otu_df, otu) |>
+  distinct()|>
+  anti_join(., not_in_any_isolate)|>
   pull(otu)
 
 pruned.data <- prune_taxa(otu_in_isolate, all.data)
@@ -205,7 +184,8 @@ pruned.treeGR
 pruned.treeCC <- plot_tree(pruned.data, ladderize = T, color = "ccEffect", justify = "left")
 pruned.treeCC
 #### Is anything quality?####
-quality <- otuTable%>%
-  mutate(percent = count/totalReads*100)%>%
-  group_by(Isolate)%>%
+quality <- otuTable|>
+  mutate(percent = count/totalReads*100)|>
+  group_by(Isolate)|>
   mutate(major = max(percent))
+
