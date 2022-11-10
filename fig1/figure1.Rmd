@@ -1,0 +1,237 @@
+---
+title: "Figure 1, Isolates Paper"
+author: "Dylan Baker"
+output:
+  html_document:
+    code_folding: hide
+    highlight: haddock
+    keep_md: yes
+    number_sections: yes
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+      toc_depth: 3
+  pdf_document:
+    toc: yes
+---
+```{r packages}
+require("knitr")
+
+list.of.packages <- c(
+  "tidyverse",
+  "ggpubr",
+  "patchwork",
+  "tidytext"
+)
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])] 
+if(length(new.packages)) install.packages(new.packages)
+
+library(tidyverse)
+library(ggpubr)
+library(patchwork)
+library(tidytext)
+
+
+```
+
+``` {r Import Data}
+Phycosphere_tax <- read_tsv(file="../mothur_outputs/all_seqs/final.merge.asv.ASV.cons.taxonomy") |>
+		rename_all(tolower) |>  mutate(taxonomy=str_replace_all(string=taxonomy, pattern="\\(\\d*\\)", replacement="")) |>
+		mutate(taxonomy=str_replace_all(string=taxonomy , pattern=";$", replacement="")) |>
+    rename("asv" = otu) |>
+		separate(taxonomy, into=c("domain", "phylum", "class", "order", "family", "genus"), sep=";") #|>
+  # filter(!str_detect(genus, "unclassified")) |>
+  # filter(!str_detect(genus, "uncultured")) |>
+  # filter(!str_detect(genus, "Unknown")) 
+	
+Phycosphere_asv <- read_tsv("../mothur_outputs/all_seqs/final.merge.asv.shared", col_types=cols(Group=col_character())) |>
+	select(-label, -numASVs) |>
+ 	pivot_longer(cols=-Group, names_to="asv", values_to="count")|>
+  filter(count > 0)
+sampledata <- read_csv("../mothur_outputs/all_seqs/GRBC_metadata.csv")
+
+#Create two separate dataframes with phycosphere and isolate data.
+phycosphere_data <- anti_join(Phycosphere_asv, sampledata, by = "Group")
+
+GRBC_data <- inner_join(Phycosphere_asv, sampledata, by = "Group") |>
+  mutate(color = case_when(host_species == "Chlorella" ~ "#7FC97F",
+          host_species == "Coelastrum"~ "#BEAED4",
+          host_species == "Scenedesmus"~ "#E0115F",
+          host_species == "Monoraphidium"~"#FDC086",
+          host_species == "Selenastrum"~"#386CB0", 
+          TRUE ~ "black"))
+
+GRBC_counts <- GRBC_data |> 
+  group_by(Group) |>
+  summarize(n = sum(count)) |>
+  ungroup() |>
+  rename("total_count_group" = n) |>
+  mutate(seq_type = ifelse(total_count_group == 1, "Sanger", "Miseq"))
+                              
+GRBC_data <- inner_join(GRBC_data, GRBC_counts, by = "Group") |>
+  mutate(rel_abund = count/total_count_group)
+
+#We need the number from this output to standardize counts below.
+Phycosphere_counts <- phycosphere_data |>
+  #make the data table recognize samples
+  group_by(Group) |>
+  summarize(n = sum(count)) |>
+  ungroup() |>
+  rename("total_count_group" = n)
+
+Phycosphere_asv_count <- inner_join(Phycosphere_asv, Phycosphere_counts, by = "Group") |>
+  mutate(rel_abund = count/total_count_group) |>
+  #Add Host Species Information
+    mutate(host_species = case_when(str_detect(Group, "Chlorella") ~ "Chlorella",
+                        str_detect(Group, "Coelastrum") ~ "Coelastrum",
+                        str_detect(Group, "Scenedesmus") ~ "Scenedesmus",
+                        str_detect(Group, "Monoraphidium") ~ "Monoraphidium",
+                        str_detect(Group, "Selenastrum") ~ "Selenastrum",
+                        TRUE ~"Natural Community"))
+
+Phycosphere_asv_D3 <- Phycosphere_asv_count |> 
+  filter((str_detect(Group,"D3$")))
+
+
+Phycosphere_asv_D31 <- Phycosphere_asv_count |> 
+  filter(str_detect(Group,"D31"))
+
+```
+
+
+```{r Phycosphere OTU D3/D31 Filtering 0.22 um}
+#Separate D3 and D31 data
+D3_data <- inner_join(Phycosphere_asv_D3, Phycosphere_tax) |> #Groups by asv automatically
+  mutate(time = "D3") |>
+  mutate(genus=str_replace_all(string=genus,
+    pattern="Allorhizobium-Neorhizobium-Pararhizobium-Rhizobium", replacement="A-N-P-R")) 
+
+D31_data <- inner_join(Phycosphere_asv_D31, Phycosphere_tax) |> #Groups by otu automatically
+  mutate(time = "D31") |>
+  mutate(genus=str_replace_all(string=genus,
+    pattern="Allorhizobium-Neorhizobium-Pararhizobium-Rhizobium", replacement="A-N-P-R")) 
+
+#Recombine as one dataframe for contamination checks
+agg_genus_data <- rbind(D3_data, D31_data)
+# unique genera
+length(unique(agg_genus_data$genus)) 
+
+```
+
+```{r GRBC Comparison}
+
+#Filter genus hits from GRBC silva and freshwater database hits
+Phycosphere_GRBC_D3 <- inner_join(GRBC_data, D3_data, by = c("asv", "host_species")) |>
+  filter(!str_detect(Isolate_Number, "D31")) |>
+  select(asv, host_species, color) |>
+  distinct() 
+
+Phycosphere_GRBC_D31 <- inner_join(GRBC_data, D31_data, by = c("asv", "host_species")) |>
+  filter(str_detect(Isolate_Number, "D31"))  |>
+  select(asv, host_species, color) |>
+  distinct()
+
+
+#Isolates that are probably contaminants, not represented in phycosphere data
+Phycosphere_GRBC_cont <- anti_join(GRBC_data, agg_genus_data, by = "asv") |>
+  mutate(contaminated = TRUE) |> 
+  filter(rel_abund > 0.02) |> #filter out asvs that are likely sequencing error or true contamination.
+  inner_join(Phycosphere_tax, by = "asv")
+cont_summary <- Phycosphere_GRBC_cont |> group_by(genus) |>
+  summarize(distinct_isolate = n_distinct(Group),
+            distinct_asv = n_distinct(asv))
+write.csv(Phycosphere_GRBC_cont, file = ".Isolate_contamination_report.csv")
+write.csv(cont_summary, file = "Isolate_contamination_summary.csv")
+
+agg_genus_data_D3_color <- D3_data |> 
+  #Filter out reads below a threshold (1/500 worked best) that are not part of our isolate collection
+  filter(!(rel_abund < 0.01) | asv %in% Phycosphere_GRBC_D3$asv | asv %in% Phycosphere_GRBC_D31$asv) |>
+  left_join(Phycosphere_GRBC_D3, by = c("asv", "host_species")) |>
+  group_by(asv) |>
+  mutate(color = if_else(condition = is.na(color), true = "black", false = color),
+         subset = ifelse(rel_abund > 0.01, "Abundant","Rare (<1% of Total Reads Within a Host Phycosphere)"),
+         significant = ifelse(color == "black", "", "*"),
+         time = "D3",
+         host_species = factor(host_species, 
+                               levels = c("Chlorella", "Coelastrum", "Scenedesmus", "Monoraphidium", 
+                                          "Selenastrum", "Natural Community")))
+
+agg_genus_data_D31_color <- D31_data |> 
+  #Filter out reads below the detection limit that are not part of our isolate collection
+  filter(!(rel_abund < 0.01) | asv %in% Phycosphere_GRBC_D3$asv | asv %in% Phycosphere_GRBC_D31$asv) |>
+  left_join(Phycosphere_GRBC_D31, by = c("asv", "host_species")) |>
+  mutate(color = if_else(condition = is.na(color), true = "black", false = color),
+         significant = ifelse(color == "black", "", "*"),
+         time = "D31",
+         host_species = factor(host_species, 
+                               levels = c("Chlorella", "Coelastrum", "Scenedesmus", "Monoraphidium", 
+                                          "Selenastrum", "Natural Community"))) 
+
+
+D3_plots_combined <- agg_genus_data_D3_color |>
+  # group_by(asv) |>
+  # mutate(subset = ifelse(rel_abund > 0.01, "Abundant","Rare (<1% of Total Reads Within a Host Phycosphere)")) |>
+  ggplot(aes(x = reorder_within(asv, -rel_abund, fun = sum, within = subset), y = rel_abund, fill = host_species)) +
+  geom_col() +
+  scale_x_reordered() +
+  facet_wrap(~subset, scales = "free") +
+  theme_pubclean() +
+  scale_fill_manual(values = c("Chlorella"  = "#7FC97F",
+  "Coelastrum" = "#BEAED4",
+  "Scenedesmus" = "#E0115F",
+  "Monoraphidium"="#FDC086",
+  "Selenastrum"= "#386CB0"), "Host Algae")  +
+  geom_text(aes(label = significant), 
+              position = position_stack(vjust = 0.5), vjust = .8, size = 20 / .pt) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+    labs( y = "Relative Abundance (ASV)", x = "", fill = '',
+          title = "Rank Abundance Curves of Green Alga Phycospheres, 3 Days Post Introduction to Pond Water") +
+    guides(fill = guide_legend(
+      title.position = "top",
+      nrow = 2, byrow = TRUE
+    ))
+
+D31_plots_combined<- agg_genus_data_D31_color |> 
+  mutate(subset = ifelse(rel_abund > 0.01, "Abundant","Rare (<1% of Total Reads Within a Host Phycosphere)")) |>
+  ggplot( aes(x = reorder_within(asv, -rel_abund, fun = sum, within = subset), y = rel_abund, fill = host_species)) +
+  geom_col() +
+  scale_x_reordered() +
+  facet_wrap(~subset, scales = "free") +
+  theme_pubclean() +
+  scale_fill_manual(values = c("Chlorella"  = "#7FC97F",
+  "Coelastrum" = "#BEAED4",
+  "Scenedesmus" = "#E0115F",
+  "Monoraphidium"="#FDC086",
+  "Selenastrum"= "#386CB0"), "Host Algae")  +
+  geom_text(aes(label = significant), 
+              position = position_stack(vjust = 0.5), vjust = .8, size = 20 / .pt) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+    labs( y = "Relative Abundance (ASV)", x = "Amplicon Sequence Variant", fill = '',
+          title = "Rank Abundance Curves of Green Alga Phycospheres, 31 Days Post Introduction to Pond Water") +
+    guides(fill = guide_legend(
+      title.position = "top",
+      nrow = 2, byrow = TRUE
+    ))
+
+final_plot <- (D3_plots_combined / D31_plots_combined) + plot_annotation(
+    tag_levels = "A"
+) + plot_layout(
+  guides = 'collect'  
+) & theme(legend.position = "bottom",
+          legend.justification = "center")
+
+png(filename = "abundance_plots D3 vs 31.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 14,
+    height = 10)
+final_plot
+dev.off()
+
+```
+
+
+
+
