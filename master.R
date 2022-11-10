@@ -313,7 +313,7 @@ stats_meanCoefs <- coefs |>
 list.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.list"
 constax.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.ASV.cons.taxonomy"
 shared.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.shared"
-# Tree using representative sequences from each OTU
+# Tree using representative sequences from each asv
 tree.file <- "./mothur_outputs/GRBC_seqs/final.an.rep.asvRename.phylip.tre"
 # Tree that uses isolate names, result of shared.tree() command in mothur --> looks very weird
 # tree.file <- "./raw_data/mothur_outputs/final.an.jclass.unique.tre"
@@ -328,6 +328,7 @@ tree.data <- read_tree(treefile = tree.file)
 # Convert stats data into phyloseq sample data (syntax of Isolate names changed to match mothur sample name syntax)
 sam.dataMiseqNames <- stats_meanCoefs |>
   mutate(Isolate = str_replace(Isolate, ",", "point"),
+         Isolate = str_replace(Isolate, "DF", "D31"),
          seq_type = "Miseq") 
 sam.dataJinny <- stats_meanCoefs |> 
   filter(str_detect(Isolate, "DF") & host_species == "chlorella") |>
@@ -363,12 +364,15 @@ sam.dataJinny <- stats_meanCoefs |>
                              Isolate == "7DF" ~ "S7",
                              Isolate == "8DF" ~ "S8",
                              Isolate == "9DF" ~ "S9W"
-                             )) |>
+                             ),
+         seq_type = "Miseq") |>
   filter(!is.na(Isolate))
 
 sam.dataSangerNames <- sam.dataMiseqNames |>
   mutate(seq_type = "Sanger",
-         Isolate = str_replace(Isolate, "D3", "_D3"))
+         Isolate = str_replace(Isolate, "D3", "_D3"),
+         Isolate = str_replace(Isolate, "DF", "_DF"),
+         Isolate = str_replace(Isolate, "D31", "_D31"))
 
 sam.dataDF <- rbind(sam.dataMiseqNames, sam.dataSangerNames, sam.dataJinny)
 
@@ -377,9 +381,9 @@ sam.data <- sam.dataDF |>
   sample_data(.)
 
 # verify that sample names match (there will be more samples in mo.data, because we included environmental samples in our analysis) - most important here is that syntax is the same (underscores between number and day, ex: 23D3 becomes 23_D3, 30,1DF becomes 30_1DF)
-sample_names(mo.data) <- str_replace(sample_names(mo.data), "_D", "sepD")
 sample_names(mo.data)
 sample_names(sam.data)
+diffobj::diffChr(sample_names(mo.data), sample_names(sam.data))
 
 # change taxonomic "rank names" to recognizable classifications (rank 1-7 to KPCOFGS)
 rank_names(mo.data)
@@ -394,73 +398,69 @@ taxTable <- as.data.frame(all.data@tax_table)|>
   rownames_to_column(var = "asv")
 
 sampleData <- sam.dataDF |>
-  mutate(Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","),
-         Isolate = str_replace(Isolate, "sep", ""),
-         Isolate = str_replace(Isolate, "_", ""))|>
   distinct()
 
-otuTable <- as.data.frame(all.data@otu_table)|>
-  rownames_to_column(., var = "otu")|>
-  pivot_longer(!otu, names_to = "Isolate", values_to = "count")|>
+asvTable <- as.data.frame(all.data@otu_table)|>
+  rownames_to_column(var = "asv")|>
+  pivot_longer(!asv, names_to = "Isolate", values_to = "count")|>
   filter(count != 0)|>
   group_by(Isolate)|>
   mutate(totalReads = sum(count),
-         otuMatches = n(),
-         readType = ifelse(totalReads == 1, "sanger", "miseq"),
+         asvMatches = n(),
          contamFlag = ifelse(count <= 0.1*totalReads, T, F))|> # 10% contam threshold
-         # contamFlag = ifelse(count <= 0.05*totalReads, T, F))|> #5% contam threshold
+         #contamFlag = ifelse(count <= 0.05*totalReads, T, F))|> #5% contam threshold
   ungroup()
 
-isolateTax <- otuTable |> 
-## This filter pulls out only sample data (removes control, background, and pond OTUs)
-  filter(contamFlag == F, str_detect(.$Isolate, "^[:digit:]|^S|^_"))|> 
+isolateTax <- asvTable |> 
+## This filter pulls out only sample data (removes control, background, and pond asvs)
+  filter(contamFlag == F, str_detect(Isolate, "^[:digit:]|^S|^_"))|> 
   # distinct()|> ## not needed
   group_by(Isolate)|>
-  mutate(numOTUs = n(),
-         mixed = ifelse(numOTUs > 1, T, F),
+  mutate(numasvs = n(),
+         mixed = ifelse(numasvs > 1, T, F),
          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
          Isolate = str_replace(Isolate, "sep", ""),
          Isolate = str_replace(Isolate, "_", ""))|>
-  left_join(., sampleData)|>
-  left_join(., taxTable)
+  left_join(sampleData)|>
+  left_join(taxTable)
   
 
 #### Pull the Pond Data Only ####
-pondTax <- as.data.frame(all.data@otu_table)|>
-  rownames_to_column(., var = "otu")|>
-  pivot_longer(!otu, names_to = "Isolate", values_to = "count")|>
-  filter(count != 0,
-         Isolate == "P1sepD0sepR1sep022um" |
-           Isolate == "P1sepD0sepR2sep022um"|
-           Isolate == "P2sepD0sepR2sep022um"|
-           Isolate == "P2sepD0sepR3sep022um"|
-           Isolate == "P3sepD0sepR1sep022um"|
-           Isolate == "P3sepD0sepR2sep022um"|
-           Isolate == "P3sepD0sepR3sep022um")|>
-  group_by(Isolate)|>
-  mutate(numOTUs = n(),
-         mixed = ifelse(numOTUs > 1, T, F),
-         Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
-         Isolate = str_replace(Isolate, "sep", ""),
-         Isolate = str_replace(Isolate, "_", ""))|>
-  left_join(., sampleData)|>
-  left_join(., taxTable)
+# pondTax <- as.data.frame(all.data@otu_table)|>
+#   rownames_to_column(., var = "asv")|>
+#   pivot_longer(!asv, names_to = "Isolate", values_to = "count")|>
+#   filter(count != 0,
+#          Isolate == "P1sepD0sepR1sep022um" |
+#            Isolate == "P1sepD0sepR2sep022um"|
+#            Isolate == "P2sepD0sepR2sep022um"|
+#            Isolate == "P2sepD0sepR3sep022um"|
+#            Isolate == "P3sepD0sepR1sep022um"|
+#            Isolate == "P3sepD0sepR2sep022um"|
+#            Isolate == "P3sepD0sepR3sep022um")|>
+#   group_by(Isolate)|>
+#   mutate(numasvs = n(),
+#          mixed = ifelse(numasvs > 1, T, F),
+#          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
+#          Isolate = str_replace(Isolate, "sep", ""),
+#          Isolate = str_replace(Isolate, "_", ""))|>
+#   left_join(., sampleData)|>
+#   left_join(., taxTable)
 
 #### Pull the Phycosphere Data Only ####
 
-phycosphereTax <- as.data.frame(all.data@otu_table)|>
-  rownames_to_column(., var = "otu")|>
-  pivot_longer(!otu, names_to = "Isolate", values_to = "count")|>
-  filter(count != 0,
-         str_detect(Isolate, "^J") == T)|>
-  group_by(Isolate)|>
-  mutate(numOTUs = n(),
-         mixed = ifelse(numOTUs > 1, T, F),
-         Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
-         Isolate = str_replace(Isolate, "sep", ""),
-         Isolate = str_replace(Isolate, "_", ""))|>
-  left_join(., sampleData)|>
-  left_join(., taxTable)
+# phycosphereTax <- as.data.frame(all.data@otu_table)|>
+#   rownames_to_column(., var = "asv")|>
+#   pivot_longer(!asv, names_to = "Isolate", values_to = "count")|>
+#   filter(count != 0,
+#          str_detect(Isolate, "^J") == T)|>
+#   group_by(Isolate)|>
+#   mutate(numasvs = n(),
+#          mixed = ifelse(numasvs > 1, T, F),
+#          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
+#          Isolate = str_replace(Isolate, "sep", ""),
+#          Isolate = str_replace(Isolate, "_", ""))|>
+#   left_join(., sampleData)|>
+#   left_join(., taxTable)
 
 #### Write CSV Files ####
 ## Save Colors for Future Figures
@@ -499,7 +499,7 @@ pure_cultures <- isolateTax |> filter(mixed == F)
 write.csv(pure_cultures, file = "./csv_files/collection_tax_data_pureOnly.csv", row.names = F)
 
 ## Save the taxonomic information for the pond/natural community Data
-write.csv(pondTax, file = "./csv_files/natCom_tax_data.csv", row.names = F)
+#write.csv(pondTax, file = "./csv_files/natCom_tax_data.csv", row.names = F)
 
 ## Save the taxonomic information for the phycosphere data
-write.csv(phycosphereTax, file = "./csv_files/phycosphere_tax_data.csv", row.names = F)
+#write.csv(phycosphereTax, file = "./csv_files/phycosphere_tax_data.csv", row.names = F)
