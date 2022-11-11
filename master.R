@@ -8,6 +8,7 @@
 # Data Processing
 library(tidyverse)
 library(lubridate)
+library(growthrates)
 
 # Phyloseq Processing
 library(phyloseq)
@@ -64,6 +65,23 @@ read_map <- function(map_list) {
     select(-filename)
 }
 
+extract_dfs <- function(x, full_results) { 
+  tryCatch(
+   expr = {
+    num <- x
+    name <- names(full_results[num]) 
+    df <- as.data.frame(full_results[[num]]$coefficients) %>%
+      mutate(sample = name) %>%
+      select(sample, `Std. Error`, Estimate) %>%
+      rename(growthrate = Estimate,
+           std_error = `Std. Error`) %>%
+      slice(2) }, 
+  finally = {
+  return(df)
+  }
+  )
+}
+
 ## Grubbs Test checks for outliers and gives statistical basis for exclusion
 ## Used just before normalization
 grubbs <- function(df){
@@ -118,6 +136,7 @@ map_list <- list.files(path = folder_list,
 
 map_data_all <- map_df(map_list, ~read_map(.))
 
+
 ## Combine Plate and Plate Map Data
 data <- inner_join(plate_data_all, map_data_all,
                    by = c("Well", "plate_no", "host_species"))|>
@@ -140,11 +159,20 @@ data <- inner_join(plate_data_all, map_data_all,
          Isolate, exact_isolate, read_day, read_time,
          read_timeHours, ChlA_100, day_mean, day_sd, Outlier)
 
+#Evaporation coefficient for the plates
+evap_coef <- 60/200/max(data$read_timeHours)
+
+#Correct for plate evaporation
+data <- data |>
+  mutate(ChlA_100 = (1-evap_coef*read_timeHours)*ChlA_100) |>
+  arrange(read_timeHours)
+
 #### Statistical Analysis of Plate Reader Data ####
 algal_species <- unique(data$host_species)
 
 ## data_flagged appends a T/F flag to any wells that demonstrate unreasonably high Chlorophyll A fluorescence on day 0 (defined as more than 2* the axenic control wells) as these wells likely contain algal contaminants or cyanobacteria that will disrupt fluorescence measurement throughout the experiment
 data_flagged <- as.list(1:length(algal_species))
+
 for(i in 1:length(algal_species)){
   host <- algal_species[i]
   host_data <- data |> filter(host_species == host)
@@ -158,6 +186,30 @@ for(i in 1:length(algal_species)){
   data_flagged[[i]] <- left_join(host_data, flags)
 }
 
+gr_chlA <- data |>
+  filter(Isolate != "MC") |>
+  all_easylinear(ChlA_100 ~ read_timeHours | exact_isolate)
+results_full_chlA <- summary(gr_chlA)
+
+results_chlA<- results(gr_chlA) |>
+  rename(growthrate = mumax)
+
+std_err_num <- as.list(1:length(results_full_chlA))
+
+std_err_chlA <- lapply(std_err_num, extract_dfs,
+                       full_results = results_full_chlA) |>
+  bind_rows() |>
+  mutate(yplus = growthrate + std_error,
+         yminus = growthrate - std_error) |>
+  select(-growthrate)
+
+#Add standard error to the dataframe
+growthrates <- inner_join(results_chlA, std_err_chlA, by = c("exact_isolate" = "sample")) |>
+  select(exact_isolate, growthrate,
+         r2, std_error) |>
+  mutate(growthrate = ifelse(is.na(growthrate), 0, growthrate))
+####Stats####
+
 data_split <- bind_rows(data_flagged) |>
   mutate(Day_isolated = ifelse(Isolate == "AC", "AC", Day_isolated))|>
   filter(algae_flag != T,
@@ -167,7 +219,7 @@ data_split <- bind_rows(data_flagged) |>
 coefList <- foreach(i = 1:length(data_split), .packages = "tidyverse") %dopar%{
   tryCatch({
     df <- data_split[[i]]
-    aPara <- max(df$ChlA_100)+20
+    aPara <- max(df$ChlA_100)+ 0.05*max(df$ChlA_100)
     parameters <- coef(lm(qlogis(ChlA_100/aPara) ~ read_timeHours, data = df))
     iPara <- parameters[[1]]
     xPara <- parameters[[2]]
@@ -175,7 +227,7 @@ coefList <- foreach(i = 1:length(data_split), .packages = "tidyverse") %dopar%{
     mod <- nls(ChlA_100 ~ A/(1 + exp(-(I + X * read_timeHours))),
                start = list(A = aPara, I = iPara, X = xPara),
                data = df, trace = T, nls.control(maxiter = 100, warnOnly = T))
-    # modSummary <- summary(mod)
+    modSummary <- summary(mod)
     
     aMod <- coef(mod)[1]
     iMod <- coef(mod)[2]
@@ -195,10 +247,12 @@ iKey <- data |>
 
 coefs <- bind_rows(coefList)|>
   left_join(iKey)|>
-  ungroup()
+  left_join(growthrates) |>
+  mutate(growthrate = ifelse(is.na(growthrate), growthParam, growthrate))
 
 ACcoefs <- coefs |> filter(Isolate == "AC")
-coefList_4t <- split(coefs, coefs$Isolate)
+
+coefList_4t <- split(coefs, list(coefs$Isolate, coefs$plate_no), drop = T)#remove empty lists from resulting split dataframe
 
 statsList <- foreach(i = 1:length(coefList_4t), .packages = c("tidyverse", "broom")) %dopar%{
   tryCatch({
@@ -217,13 +271,13 @@ statsList <- foreach(i = 1:length(coefList_4t), .packages = c("tidyverse", "broo
                            alternative = "less"))|>
       mutate(pCC_less = p.value, Isolate = Isolate)|>
       select(pCC_less, Isolate)
-    gr_greater <- tidy(t.test(tt_df$growthParam, 
-                              ac_df$growthParam, 
+    gr_greater <- tidy(t.test(tt_df$growthrate, 
+                              ac_df$growthrate, 
                               alternative = "greater"))|>
       mutate(pGR_greater = p.value, Isolate = Isolate)|>
       select(pGR_greater, Isolate)
-    gr_less <- tidy(t.test(tt_df$growthParam, 
-                           ac_df$growthParam, 
+    gr_less <- tidy(t.test(tt_df$growthrate, 
+                           ac_df$growthrate, 
                            alternative = "less"))|>
       mutate(pGR_less = p.value, Isolate = Isolate)|>
       select(pGR_less, Isolate)
@@ -237,7 +291,7 @@ statsList <- foreach(i = 1:length(coefList_4t), .packages = c("tidyverse", "broo
 }
 
 stats <- bind_rows(statsList)|>
-  select(Isolate, host_species, plate_no, pCC_greater, pCC_less, pGR_greater, pGR_less)|>
+  select(Isolate, host_species, plate_no, pCC_greater, pCC_less, pGR_greater, pGR_less, std_error)|>
   mutate(ccEffect = ifelse(pCC_greater <= 0.05 & pCC_less > 0.05, "Increased CC",
                            ifelse(pCC_greater > 0.05 & pCC_less <= 0.05, "Decreased CC",
                                   ifelse(pCC_greater > 0.05 & pCC_less > 0.05,
@@ -257,7 +311,7 @@ ac_coefs <- stats_coefs |>
   group_by(host_species, plate_no)|>
   mutate(nSamples = n(),
          meanCC = mean(asymptote),
-         meanGR = mean(growthParam))|>
+         meanGR = mean(growthrate))|>
   ungroup()|>
   # These columns are empty, as there is no statistics data for axenic controls samples
   select(-pCC_greater, -pCC_less, -pGR_greater, -pGR_less,
@@ -269,6 +323,7 @@ stats_coefs_split <- stats_coefs |>
   filter(Isolate != "AC" & Isolate != "MC")|>
   mutate(split_var = paste(Isolate, plate_no, sep = "_"))%>%
   split(., .$split_var)
+
 for(i in 1:length(stats_coefs_split)){
   df <- stats_coefs_split[[i]]
   plate <- unique(df$plate_no)
@@ -276,12 +331,12 @@ for(i in 1:length(stats_coefs_split)){
   ac <- ac_coefs |>
     filter(host_species == host & plate_no == plate & asymptote >= 0)|>
     summarize(acCC = mean(asymptote),
-              acGR = mean(growthParam))
+              acGR = mean(growthrate))
   acCC <- as.numeric(ac$acCC)
   acGR <- as.numeric(ac$acGR)
   stats_coefs_split[[i]] <- df |>
     mutate(normCC = asymptote/acCC,
-           normGR = growthParam/acGR,
+           normGR = growthrate/acGR,
            logNormCC = log(normCC),
            logNormGR = log(normGR))
 }
@@ -293,8 +348,8 @@ stats_meanCoefs <- coefs |>
   mutate(n = n())|>
   summarize(meanCC = mean(asymptote),
             seCC = sd(asymptote)/sqrt(n),
-            meanGR = mean(growthParam),
-            seGR = sd(growthParam)/sqrt(n))|>
+            meanGR = mean(growthrate),
+            seGR = ifelse(!is.na(std_error), std_error, sd(growthParam)/sqrt(n))) |>
   # NOTE: need to write in normalization code --> figure this out Tuesday
             # ,
             # mean_normCC = mean(normCC),
@@ -326,6 +381,13 @@ mo.data <- import_mothur(mothur_list_file = list.file,
 tree.data <- read_tree(treefile = tree.file)
 
 # Convert stats data into phyloseq sample data (syntax of Isolate names changed to match mothur sample name syntax)
+duplicate_stats <- split(stats_meanCoefs, duplicated(stats_meanCoefs$Isolate) | duplicated(stats_meanCoefs$Isolate, fromLast = TRUE), 
+                         drop == "FALSE") %>%
+  
+duplicates <-  rbind(duplicate_stats[["TRUE"]]) %>%
+  filter(!Isolate == "AC") %>%
+  select(Isolate, annotation)
+  
 sam.dataMiseqNames <- stats_meanCoefs |>
   mutate(Isolate = str_replace(Isolate, ",", "point"),
          Isolate = str_replace(Isolate, "DF", "D31"),
@@ -423,44 +485,6 @@ isolateTax <- asvTable |>
          Isolate = str_replace(Isolate, "_", ""))|>
   left_join(sampleData)|>
   left_join(taxTable)
-  
-
-#### Pull the Pond Data Only ####
-# pondTax <- as.data.frame(all.data@otu_table)|>
-#   rownames_to_column(., var = "asv")|>
-#   pivot_longer(!asv, names_to = "Isolate", values_to = "count")|>
-#   filter(count != 0,
-#          Isolate == "P1sepD0sepR1sep022um" |
-#            Isolate == "P1sepD0sepR2sep022um"|
-#            Isolate == "P2sepD0sepR2sep022um"|
-#            Isolate == "P2sepD0sepR3sep022um"|
-#            Isolate == "P3sepD0sepR1sep022um"|
-#            Isolate == "P3sepD0sepR2sep022um"|
-#            Isolate == "P3sepD0sepR3sep022um")|>
-#   group_by(Isolate)|>
-#   mutate(numasvs = n(),
-#          mixed = ifelse(numasvs > 1, T, F),
-#          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
-#          Isolate = str_replace(Isolate, "sep", ""),
-#          Isolate = str_replace(Isolate, "_", ""))|>
-#   left_join(., sampleData)|>
-#   left_join(., taxTable)
-
-#### Pull the Phycosphere Data Only ####
-
-# phycosphereTax <- as.data.frame(all.data@otu_table)|>
-#   rownames_to_column(., var = "asv")|>
-#   pivot_longer(!asv, names_to = "Isolate", values_to = "count")|>
-#   filter(count != 0,
-#          str_detect(Isolate, "^J") == T)|>
-#   group_by(Isolate)|>
-#   mutate(numasvs = n(),
-#          mixed = ifelse(numasvs > 1, T, F),
-#          Isolate = str_replace(Isolate, "(?<=\\d)sep(?=\\d)", ","), #these str_replace functions revert sample names to R naming convention (removes "sep", underscores, ect.)
-#          Isolate = str_replace(Isolate, "sep", ""),
-#          Isolate = str_replace(Isolate, "_", ""))|>
-#   left_join(., sampleData)|>
-#   left_join(., taxTable)
 
 #### Write CSV Files ####
 ## Save Colors for Future Figures
