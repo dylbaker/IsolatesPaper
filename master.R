@@ -347,8 +347,7 @@ stats_normCoefs <- bind_rows(stats_coefs_split)
 #### Calculate Triplicate Mean of Stats Coefficients ####
 stats_meanCoefs <- stats_normCoefs |>
   group_by(Isolate, host_species, plate_no) |>
-  mutate(n = n()) |>
-  summarize(
+  mutate(n = n(),
     meanCC = mean(asymptote),
     seCC = sd(asymptote) / sqrt(n),
     meanGR = mean(growthrate),
@@ -358,12 +357,13 @@ stats_meanCoefs <- stats_normCoefs |>
     mean_logNormCC = mean(logNormCC),
     mean_logNormGR = mean(logNormGR)
   ) |>
-  distinct()
+  filter(n >= 3) |>
+  distinct(Isolate, plate_no, .keep_all = T)
 #### Read in Mothur Outputs and Combine with Coculture Data and Stats ####
 # Define mothur outputs
-list.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.list"
-constax.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.ASV.cons.taxonomy"
-shared.file <- "./mothur_outputs/GRBC_seqs/final.pick.asv.shared"
+list.file <- "./mothur_outputs/all_seqs/final.merge.asv.list"
+constax.file <- "./mothur_outputs/all_seqs/final.merge.asv.ASV.cons.taxonomy"
+shared.file <- "./mothur_outputs/all_seqs/final.merge.asv.shared"
 # Tree using representative sequences from each asv
 tree.file <- "./mothur_outputs/GRBC_seqs/final.an.rep.asvRename.phylip.tre"
 # Tree that uses isolate names, result of shared.tree() command in mothur --> looks very weird
@@ -372,8 +372,7 @@ tree.file <- "./mothur_outputs/GRBC_seqs/final.an.rep.asvRename.phylip.tre"
 # Read mothur outputs into phyloseq/R
 mo.data <- import_mothur(mothur_list_file = list.file,
                          mothur_constaxonomy_file = constax.file,
-                         mothur_shared_file = shared.file,
-                         mothur_tree_file = tree.file)
+                         mothur_shared_file = shared.file)
 tree.data <- read_tree(treefile = tree.file)
 
 # Convert stats data into phyloseq sample data (syntax of Isolate names changed to match mothur sample name syntax)
@@ -381,8 +380,7 @@ duplicate_stats <- split(stats_meanCoefs, duplicated(stats_meanCoefs$Isolate) | 
                          drop == "FALSE")
   
 duplicates <-  rbind(duplicate_stats[["TRUE"]]) %>%
-  filter(!Isolate == "AC") %>%
-  dplyr::select(Isolate, annotation)
+  filter(!Isolate == "AC")
   
 sam.dataMiseqNames <- stats_meanCoefs |>
   mutate(Isolate = str_replace(Isolate, ",|\\.", "point"),
@@ -437,7 +435,7 @@ sam.dataSangerNames <- stats_meanCoefs |>
 sam.dataDF <- rbind(sam.dataMiseqNames, sam.dataSangerNames, sam.dataJinny)
 
 sam.data <- sam.dataDF |>
-  filter(! Isolate == "199point1D3" & ! Isolate == "199point1_D3" & ! Isolate == "AC") |>
+  filter(! Isolate == "199point1_D3" & ! Isolate == "AC") |>
   group_by(Isolate, seq_type) |>
   distinct(Isolate) |>
   column_to_rownames(var = "Isolate")|>
@@ -446,7 +444,7 @@ sam.data <- sam.dataDF |>
 # verify that sample names match (there will be more samples in mo.data, because we included environmental samples in our analysis) - most important here is that syntax is the same (underscores between number and day, ex: 23D3 becomes 23_D3, 30,1DF becomes 30_1DF)
 sample_names(mo.data)
 sample_names(sam.data)
-diffobj::diffChr(sample_names(mo.data), sample_names(sam.data))
+#diffobj::diffChr(sample_names(mo.data), sample_names(sam.data))
 
 # change taxonomic "rank names" to recognizable classifications (rank 1-7 to KPCOFGS)
 rank_names(mo.data)
@@ -460,6 +458,9 @@ all.data <- merge_phyloseq(mo.data, sam.data)
 taxTable <- as.data.frame(all.data@tax_table)|>
   rownames_to_column(var = "asv")
 
+sampleData <- sam.dataDF |>
+  filter(! Isolate == "199point1_D3" & ! Isolate == "AC") %>%
+  distinct(.,Isolate, .keep_all = TRUE)
 
 asvTable <- as.data.frame(all.data@otu_table)|>
   rownames_to_column(var = "asv")|>

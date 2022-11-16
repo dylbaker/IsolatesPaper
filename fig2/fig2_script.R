@@ -3,7 +3,6 @@
 ##### Libraries ####
 library(tidyverse)
 library(ggpubr)
-library(tidytext)
 library(patchwork)
 
 #### Read in Data from Master ####
@@ -11,16 +10,30 @@ colors <- read.csv("./csv_files/colors.csv")|>
   mutate(host_species = str_to_lower(hostLong))|>
   select(host_species, color)
 
-stats_pure_meanCoefs <- read.csv("./csv_files/collection_tax_data_pureOnly.csv") |>
+contaminates <- read.csv("./fig1/Isolate_contamination_report.csv") |>
+  mutate(asv = str_replace(string = asv, pattern = "0+", replacement = ''))
+ 
+stats_meanCoefs <- read.csv("./csv_files/collection_tax_data.csv") |>
   mutate(asv = str_replace(string = asv, pattern = "0+", replacement = ''),
          order = factor(parse_number(asv)),
          isolation_day = ifelse(str_detect(Isolate, "D31|DF"), "D31", "D3")) |>
+  anti_join(contaminates, by = "asv") |>
   arrange(order, desc = TRUE) 
+
+stats_pure_meanCoefs <- filter(stats_meanCoefs, mixed == F)
 
 asv_presence <- stats_pure_meanCoefs |>
   group_by(asv) |>
   mutate(distinct_hosts = n_distinct(host_species),
          distinct_day = n_distinct(isolation_day))
+
+summary_data <- stats_meanCoefs |>
+  distinct(growthrate, .keep_all =TRUE) |>
+  group_by(host_species,isolation_day) |>
+  summarise(n_pos_gr = sum((logNormGR > 0 & pGR_greater <= 0.05)),
+            n_0_gr = sum(pGR_greater >= 0.05 & pGR_less >= 0.05),
+            n_neg_gr = sum(logNormGR < 0 & pGR_less <= 0.05))
+  
 #### Faceted Plots ####
 grPlot_facet <- stats_pure_meanCoefs |>
   mutate(significant = ifelse(pGR_greater <= 0.05 |

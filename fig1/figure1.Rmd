@@ -40,15 +40,13 @@ Phycosphere_tax <- read_tsv(file="../mothur_outputs/all_seqs/final.merge.asv.ASV
 		rename_all(tolower) |>  mutate(taxonomy=str_replace_all(string=taxonomy, pattern="\\(\\d*\\)", replacement="")) |>
 		mutate(taxonomy=str_replace_all(string=taxonomy , pattern=";$", replacement="")) |>
     rename("asv" = otu) |>
-		separate(taxonomy, into=c("domain", "phylum", "class", "order", "family", "genus"), sep=";") #|>
-  # filter(!str_detect(genus, "unclassified")) |>
-  # filter(!str_detect(genus, "uncultured")) |>
-  # filter(!str_detect(genus, "Unknown")) 
+		separate(taxonomy, into=c("domain", "phylum", "class", "order", "family", "genus"), sep=";")
 	
 Phycosphere_asv <- read_tsv("../mothur_outputs/all_seqs/final.merge.asv.shared", col_types=cols(Group=col_character())) |>
 	select(-label, -numASVs) |>
  	pivot_longer(cols=-Group, names_to="asv", values_to="count")|>
   filter(count > 0)
+
 sampledata <- read_csv("../mothur_outputs/all_seqs/GRBC_metadata.csv")
 
 #Create two separate dataframes with phycosphere and isolate data.
@@ -66,8 +64,7 @@ GRBC_counts <- GRBC_data |>
   group_by(Group) |>
   summarize(n = sum(count)) |>
   ungroup() |>
-  rename("total_count_group" = n) |>
-  mutate(seq_type = ifelse(total_count_group == 1, "Sanger", "Miseq"))
+  rename("total_count_group" = n)
                               
 GRBC_data <- inner_join(GRBC_data, GRBC_counts, by = "Group") |>
   mutate(rel_abund = count/total_count_group)
@@ -141,7 +138,7 @@ Phycosphere_GRBC_cont <- anti_join(GRBC_data, agg_genus_data, by = "asv") |>
 cont_summary <- Phycosphere_GRBC_cont |> group_by(genus) |>
   summarize(distinct_isolate = n_distinct(Group),
             distinct_asv = n_distinct(asv))
-write.csv(Phycosphere_GRBC_cont, file = ".Isolate_contamination_report.csv")
+write.csv(Phycosphere_GRBC_cont, file = "Isolate_contamination_report.csv")
 write.csv(cont_summary, file = "Isolate_contamination_summary.csv")
 
 agg_genus_data_D3_color <- D3_data |> 
@@ -152,10 +149,12 @@ agg_genus_data_D3_color <- D3_data |>
   mutate(color = if_else(condition = is.na(color), true = "black", false = color),
          subset = ifelse(rel_abund > 0.01, "Abundant","Rare (<1% of Total Reads Within a Host Phycosphere)"),
          significant = ifelse(color == "black", "", "*"),
+         asv = str_replace(string = asv, pattern = "0+", replacement = ''),
          time = "D3",
          host_species = factor(host_species, 
                                levels = c("Chlorella", "Coelastrum", "Scenedesmus", "Monoraphidium", 
-                                          "Selenastrum", "Natural Community")))
+                                          "Selenastrum", "Natural Community"))) |>
+  ungroup()
 
 agg_genus_data_D31_color <- D31_data |> 
   #Filter out reads below the detection limit that are not part of our isolate collection
@@ -163,10 +162,12 @@ agg_genus_data_D31_color <- D31_data |>
   left_join(Phycosphere_GRBC_D31, by = c("asv", "host_species")) |>
   mutate(color = if_else(condition = is.na(color), true = "black", false = color),
          significant = ifelse(color == "black", "", "*"),
+         asv = str_replace(string = asv, pattern = "0+", replacement = ''),
          time = "D31",
          host_species = factor(host_species, 
                                levels = c("Chlorella", "Coelastrum", "Scenedesmus", "Monoraphidium", 
-                                          "Selenastrum", "Natural Community"))) 
+                                          "Selenastrum", "Natural Community"))) |>
+  ungroup()
 
 
 D3_plots_combined <- agg_genus_data_D3_color |>
@@ -184,16 +185,14 @@ D3_plots_combined <- agg_genus_data_D3_color |>
   "Selenastrum"= "#386CB0"), "Host Algae")  +
   geom_text(aes(label = significant), 
               position = position_stack(vjust = 0.5), vjust = .8, size = 20 / .pt) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
     labs( y = "Relative Abundance (ASV)", x = "", fill = '',
-          title = "Rank Abundance Curves of Green Alga Phycospheres, 3 Days Post Introduction to Pond Water") +
-    guides(fill = guide_legend(
-      title.position = "top",
-      nrow = 2, byrow = TRUE
-    ))
+          title = "Rank Abundance Curves of Green Alga Phycospheres, 3 Days Post Introduction to Pond Water")
+
 
 D31_plots_combined<- agg_genus_data_D31_color |> 
-  mutate(subset = ifelse(rel_abund > 0.01, "Abundant","Rare (<1% of Total Reads Within a Host Phycosphere)")) |>
+  mutate(subset = ifelse(rel_abund > 0.01, "Abundant",
+                         "Rare (<1% of Total Reads Within a Host Phycosphere)")) |>
   ggplot( aes(x = reorder_within(asv, -rel_abund, fun = sum, within = subset), y = rel_abund, fill = host_species)) +
   geom_col() +
   scale_x_reordered() +
@@ -206,20 +205,17 @@ D31_plots_combined<- agg_genus_data_D31_color |>
   "Selenastrum"= "#386CB0"), "Host Algae")  +
   geom_text(aes(label = significant), 
               position = position_stack(vjust = 0.5), vjust = .8, size = 20 / .pt) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-    labs( y = "Relative Abundance (ASV)", x = "Amplicon Sequence Variant", fill = '',
-          title = "Rank Abundance Curves of Green Alga Phycospheres, 31 Days Post Introduction to Pond Water") +
-    guides(fill = guide_legend(
-      title.position = "top",
-      nrow = 2, byrow = TRUE
-    ))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+    labs( y = "Cumulative Relative Abundance (ASV)", x = "Amplicon Sequence Variant", fill = '',
+          title = "Rank Abundance Curves of Green Alga Phycospheres, 31 Days Post Introduction to Pond Water") 
 
 final_plot <- (D3_plots_combined / D31_plots_combined) + plot_annotation(
     tag_levels = "A"
 ) + plot_layout(
   guides = 'collect'  
 ) & theme(legend.position = "bottom",
-          legend.justification = "center")
+          legend.justification = "center",
+          )
 
 png(filename = "abundance_plots D3 vs 31.png",
     res = 450,
