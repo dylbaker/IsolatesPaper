@@ -318,7 +318,8 @@ stats_meanCoefs <- stats_normCoefs |>
   filter(n >= 3) |>
   distinct(Isolate, plate_no, .keep_all = T)
 #Calculate area under the curve for a timeseries for each well on each plate.
-aucData_split <- as.list(1:length(afhData_split))
+aucData_split <- as.list(1:length(afhData_split)) 
+
 for(i in 1:length(afhData_split)){
   df <- afhData_split[[i]]
   auc <- AUC(x = df$read_time, y = df$ChlA_100, method = "spline")

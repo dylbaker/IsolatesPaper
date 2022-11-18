@@ -9,12 +9,16 @@
 library(tidyverse)
 library(lubridate)
 library(growthrates)
+library(rstatix)
 
 # Phyloseq Processing
 library(phyloseq)
 
 # Logistic Mod
 library(broom)
+
+#Area Under Curve
+library(DescTools)
 
 # for Foreach/doParallel
 library(foreach)
@@ -108,7 +112,6 @@ grubbs <- function(df){
     dplyr::select(-p_high, -p_low, -maxVal, -minVal)
   return(df_final)
 }
-
 
 #### Set Up Colors ####
 color_df <- data.frame(hostLong = c("chlorella", "coelastrum", "scenedesmus",
@@ -210,13 +213,86 @@ growthrates <- inner_join(results_chlA, std_err_chlA, by = c("exact_isolate" = "
   dplyr::select(exact_isolate, growthrate,
          r2, std_error) |>
   mutate(growthrate = ifelse(is.na(growthrate), 0, growthrate))
-####Stats####
+
+####AUC, GR, CC Stats####
 
 data_split <- bind_rows(data_flagged) |>
   mutate(Day_isolated = ifelse(Isolate == "AC", "AC", Day_isolated))|>
   filter(algae_flag != T,
          Day_isolated != "Ctrl") %>%
   split(., .$exact_isolate)
+
+aucData_split <- as.list(1:length(data_split))
+for(i in 1:length(data_split)){
+  df <- data_split[[i]]
+  auc <- AUC(x = df$read_time, y = df$ChlA_100, method = "spline")
+  auc <- as.numeric(auc)
+  aucData_split[[i]] <- data.frame("exact_isolate" = df$exact_isolate,
+                                   "Isolate" = df$Isolate,
+                                   "host_species" = df$host_species,
+                                   "plate_no" = df$plate_no,
+                                   "auc" = auc)|>
+    distinct()
+}
+#Combine area under the curve data into one list.
+aucData <- bind_rows(aucData_split)
+
+#### AUC T-Test ####
+ctrl_aucData <- filter(aucData, Isolate == "AC")
+sample_aucData <- filter(aucData, Isolate != "AC")
+
+acAUC_outliers <- ctrl_aucData |>
+  group_by(host_species, plate_no) |>
+  identify_outliers(auc)
+
+ctrl_aucData <- anti_join(ctrl_aucData, acAUC_outliers, by = "auc")
+
+sample_aucData_split <- filter(aucData, Isolate != "AC", Isolate != "MC") %>%
+  split( .$Isolate)
+
+tTestData_split <- foreach(i = 1:length(sample_aucData_split), .packages = c("tidyverse","broom")) %dopar% {
+  tryCatch({
+  df <- sample_aucData_split[[i]]
+  plate <- unique(df$plate_no)
+  sample <- unique(df$Isolate)
+  ctrl <- filter(ctrl_aucData, plate_no == plate)
+  stat_greater <- tidy(t.test(df$auc, ctrl$auc, alternative = "greater"))|>
+    mutate(Isolate = sample,
+           p_greater = p.value) |>
+    select(Isolate, p_greater)
+  stat_less <- tidy(t.test(df$auc, ctrl$auc, alternative = "less"))|>
+    mutate(Isolate = sample,
+           p_less = p.value) |>
+    select(Isolate, p_less)
+  tTestData <- full_join(stat_greater, stat_less)|>
+    mutate(Effect = ifelse(p_greater >= 0.05 & p_less >= 0.05, "Not Significant",
+                           ifelse(p_greater <= 0.05, "Positive",
+                                  ifelse(p_less <= 0.05, "Negative",
+                                         ifelse(p_greater <= 0.05 & p_less <= 0.05, "Error", NA)))))
+  return(tTestData)
+  
+}, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
+tTestData <- bind_rows(tTestData_split)
+
+#### AUC Normalization ####
+AC_auc_mean <- ctrl_aucData |>
+  group_by(host_species,plate_no) |>
+  mutate(acAuc_mean = mean(auc),
+         acAuc_se = sd(auc)/sqrt(n())) |>
+  select(host_species, plate_no, acAuc_mean, acAuc_se) |>
+  distinct()
+
+auc_data_norm <- sample_aucData |>
+  group_by(Isolate, host_species, plate_no) |>
+  summarise(auc_mean = mean(auc),
+            auc_se = sd(auc)/sqrt(n())) |>
+  left_join(AC_auc_mean)|>
+  mutate(auc_norm = auc_mean/acAuc_mean,
+         log_auc_norm = log(auc_norm)) |>
+  left_join(tTestData) |>
+  filter(!is.na(Effect))
 
 coefList <- foreach(i = 1:length(data_split), .packages = "tidyverse") %dopar%{
   tryCatch({
@@ -358,7 +434,10 @@ stats_meanCoefs <- stats_normCoefs |>
     mean_logNormGR = mean(logNormGR)
   ) |>
   filter(n >= 3) |>
-  distinct(Isolate, plate_no, .keep_all = T)
+  distinct(Isolate, plate_no, .keep_all = T) |>
+  left_join(auc_data_norm) |>
+  ungroup()
+
 #### Read in Mothur Outputs and Combine with Coculture Data and Stats ####
 # Define mothur outputs
 list.file <- "./mothur_outputs/all_seqs/final.merge.asv.list"
@@ -508,7 +587,7 @@ write.csv(stats_meanCoefs, file = "./csv_files/logistic_mod_stats_meanCoefs.csv"
 ## Save all Stats, Coefficients (raw) and normalized/log(normalized) coefficients. Does not Include controls
 write.csv(stats_normCoefs, file = "./csv_files/logistic_mod_stats_normCoefs.csv")
 
-## Save the taxonomic information for all cultures (mixed and pure)
+## Save all data including taxonomy, impact on growth outcomes (p values, normalizations), host, plate, EVERYTHING
 write.csv(isolateTax, file = "./csv_files/collection_tax_data.csv", row.names = F)
 
 ## Save the taxonomic information for only mixed cultures

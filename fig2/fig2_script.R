@@ -11,12 +11,15 @@ colors <- read.csv("./csv_files/colors.csv")|>
   select(host_species, color)
 
 contaminates <- read.csv("./fig1/Isolate_contamination_report.csv") |>
-  mutate(asv = str_replace(string = asv, pattern = "0+", replacement = ''))
+  mutate(asv = str_replace(string = asv, pattern = "0+", replacement = '')) |>
+  filter(phylum == "Bacteroidota" | phylum == "Firmicutes")
  
 stats_meanCoefs <- read.csv("./csv_files/collection_tax_data.csv") |>
   mutate(asv = str_replace(string = asv, pattern = "0+", replacement = ''),
          order = factor(parse_number(asv)),
-         isolation_day = ifelse(str_detect(Isolate, "D31|DF"), "D31", "D3")) |>
+         isolation_day = ifelse(str_detect(Isolate, "D31|DF|S"), "D31", "D3")) |>
+  distinct(exact_isolate, .keep_all = T) |>
+  distinct(Isolate, .keep_all = T)|>
   anti_join(contaminates, by = "asv") |>
   arrange(order, desc = TRUE) 
 
@@ -28,12 +31,71 @@ asv_presence <- stats_pure_meanCoefs |>
          distinct_day = n_distinct(isolation_day))
 
 summary_data <- stats_meanCoefs |>
-  distinct(growthrate, .keep_all =TRUE) |>
   group_by(host_species,isolation_day) |>
-  summarise(n_pos_gr = sum((logNormGR > 0 & pGR_greater <= 0.05)),
-            n_0_gr = sum(pGR_greater >= 0.05 & pGR_less >= 0.05),
-            n_neg_gr = sum(logNormGR < 0 & pGR_less <= 0.05))
-  
+  summarise(n_pos_gr = sum(grEffect == "Increased GR")/n(),
+            n_0_gr = sum(grEffect == "No Significant GR Change")/n(),
+            n_neg_gr = sum(grEffect == "Decreased GR")/n(),
+            n_pos_cc = sum(ccEffect == "Increased CC")/n(),
+            n_0_cc = sum(ccEffect == "No Significant CC Change")/n(),
+            n_neg_cc = sum(ccEffect == "Decreased CC")/n(),
+            n_pos = sum(c(n_pos_gr,n_pos_cc)),
+            n_neg = sum(c(n_neg_gr, n_neg_cc)),
+            n_0 = sum(c(n_0_gr,n_0_cc)),
+            total = n()
+            ) |>
+  mutate(host_species = str_to_title(host_species)) |>
+  pivot_longer(!host_species &! isolation_day & !total, names_to = "growth_outcome", values_to = "percent") |>
+  mutate(number = round(percent * total),
+         label = paste("n =", number),
+         metric = case_when(str_detect(growth_outcome, "gr") ~ "Growth Rate",
+                            str_detect(growth_outcome, "cc") ~ "Carrying Capacity",
+                            T ~ "Total"),
+         growth_outcome = case_when(str_detect(growth_outcome, "n_pos") ~ "Positive",
+                                    str_detect(growth_outcome, "n_neg") ~ "Negative",
+                                    str_detect(growth_outcome, "n_0") ~ "Neutral"))
+
+impact_barplot <-  summary_data |>
+  filter(metric == "Total") |>
+  ggplot(aes(x = growth_outcome, y = percent, fill = growth_outcome)) +
+  geom_col(position = "dodge", show.legend = F) +
+  facet_grid(host_species ~ isolation_day) +
+  scale_x_discrete("Growth Outcome", 
+                   limits = c("Negative", "Neutral" , "Positive")) +
+  geom_text(aes(label = label),  vjust = "inward") +
+  ylab("Percent of Isolates") +
+  scale_fill_manual(values = c("Neutral" = "gray", "Positive" = "springgreen", "Negative" = "#D2042D")) +
+  theme_pubclean() 
+
+impact_barplot_sep <-  summary_data |>
+  filter(metric %in% c("Growth Rate", "Carrying Capacity")) |>
+  ggplot(aes(x = growth_outcome, y = percent, fill = growth_outcome)) +
+  geom_col(position = "dodge", show.legend = F) +
+  facet_grid(host_species ~ metric + isolation_day) +
+  scale_x_discrete("Growth Outcome", 
+                   limits = c("Negative","Neutral","Positive")) +
+  geom_text(aes(label = label),  vjust = "inward") +
+  ylab("Percent of Isolates") +
+  scale_fill_manual(values = c("Neutral" = "gray", "Positive" = "springgreen", "Negative" = "#D2042D")) +
+  theme_pubclean() 
+
+png(filename = "./fig2/isolate_impact_barplot_sep.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 8,
+    height = 8)
+impact_barplot_sep
+dev.off()
+
+png(filename = "./fig2/isolate_impact_barplot.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 6,
+    height = 8)
+impact_barplot
+dev.off()
+
 #### Faceted Plots ####
 grPlot_facet <- stats_pure_meanCoefs |>
   mutate(significant = ifelse(pGR_greater <= 0.05 |
