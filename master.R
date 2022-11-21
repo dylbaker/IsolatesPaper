@@ -265,10 +265,10 @@ tTestData_split <- foreach(i = 1:length(sample_aucData_split), .packages = c("ti
            p_less = p.value) |>
     select(Isolate, p_less)
   tTestData <- full_join(stat_greater, stat_less)|>
-    mutate(Effect = ifelse(p_greater >= 0.05 & p_less >= 0.05, "Not Significant",
-                           ifelse(p_greater <= 0.05, "Positive",
-                                  ifelse(p_less <= 0.05, "Negative",
-                                         ifelse(p_greater <= 0.05 & p_less <= 0.05, "Error", NA)))))
+    mutate(Effect = case_when((p_greater > 0.05 & p_less > 0.05) ~ "Not Significant",
+                              p_greater <= 0.05 ~ "Positive",
+                              p_less <= 0.05 ~ "Negative",
+                              T ~ "Error"))
   return(tTestData)
   
 }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
