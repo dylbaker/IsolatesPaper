@@ -4,7 +4,7 @@
 library(tidyverse)
 library(ggpubr)
 library(patchwork)
-
+library("rstatix")
 #### Read in Data from Master ####
 colors <- read.csv("./csv_files/colors.csv")|>
   mutate(host_species = str_to_lower(hostLong))|>
@@ -17,27 +17,85 @@ contaminates <- read.csv("./fig1/Isolate_contamination_report.csv") |>
 stats_meanCoefs <- read.csv("./csv_files/collection_tax_data.csv") |>
   mutate(asv = str_replace(string = asv, pattern = "0+", replacement = ''),
          order = factor(parse_number(asv)),
-         isolation_day = ifelse(str_detect(Isolate, "D31|DF|S"), "D31", "D3")) |>
+         isolation_day = ifelse(str_detect(Isolate, "D31|DF|S"), "D31", "D3"),
+         mean_logNormGR = log(mean_normGR)) |>
   distinct(exact_isolate, .keep_all = T) |>
   distinct(Isolate, .keep_all = T)|>
-  anti_join(contaminates, by = "asv") |>
+  #anti_join(contaminates, by = "asv") |>
   arrange(order, desc = TRUE) 
 
 stats_pure_meanCoefs <- filter(stats_meanCoefs, mixed == F)
 
-asv_presence <- stats_pure_meanCoefs |>
-  group_by(asv) |>
-  mutate(distinct_hosts = n_distinct(host_species),
-         distinct_day = n_distinct(isolation_day))
+long_data <- stats_meanCoefs |>
+  mutate(host_species = str_to_title(host_species)) |>
+  group_by(host_species, isolation_day) |>
+  pivot_longer(c(mean_logNormGR, mean_logNormCC, log_auc_norm), names_to = "growth_metric", values_to = "value") |>
+  select(Isolate, host_species, isolation_day, growth_metric, value) |>
+  mutate(growth_metric = case_when(growth_metric == "log_auc_norm" ~ "Area Under Curve",
+                                   growth_metric == "mean_logNormCC" ~ "Carrying Capacity",
+                                   growth_metric == "mean_logNormGR" ~ "Growth Rate")) 
+  
+sig_from_zero <- long_data |>
+  group_by(growth_metric, host_species, isolation_day) |>
+  get_summary_stats(value, type = "mean_sd") |>
+  mutate(t_stat = (mean - 0)/(sd/n),
+         df = n-1, 
+         pval = 2*pt(abs(t_stat), df, lower.tail = F),
+         padj = p.adjust(pval, method = "fdr")) |>
+  add_significance("padj")
 
+tukey_hsd <- long_data |>
+  group_by(growth_metric, host_species) |>
+  tukey_hsd(value ~ isolation_day) |>
+  add_significance("p.adj") |>
+  add_xy_position(x = "isolation_day", scales = "free_y") 
+
+effects_boxplot <- stats_meanCoefs |>
+  mutate(host_species = str_to_title(host_species)) |>
+  group_by(host_species, isolation_day) |>
+  pivot_longer(c(mean_logNormGR, mean_logNormCC, log_auc_norm), names_to = "growth_metric", values_to = "value") |>
+  select(Isolate, host_species, isolation_day, growth_metric, value) |>
+  mutate(growth_metric = case_when(growth_metric == "log_auc_norm" ~ "Area Under Curve",
+                                   growth_metric == "mean_logNormCC" ~ "Carrying Capacity",
+                                   growth_metric == "mean_logNormGR" ~ "Growth Rate")) |>
+  ggplot(aes(x = isolation_day, y = value, color = isolation_day)) +
+  geom_boxplot(show.legend = F) +
+  #ylim(-1, 1) +
+  coord_cartesian(ylim = c(-1,1)) + 
+  facet_grid(host_species ~ growth_metric) +
+  ylab("Log Normalized Value") +
+  xlab("Isolation Day") +
+  geom_hline(yintercept = 0, color = "grey", linetype = "longdash") +
+  stat_pvalue_manual(tukey_hsd,
+                     label = "p.adj.signif",
+                     tip.length = 0,
+                     hide.ns = T) +
+  labs(caption = get_pwc_label(tukey_hsd)) +
+  theme_pubclean()
+
+png(filename = "./fig2/effects_barplot.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 8,
+    height = 8) 
+effects_boxplot
+dev.off()
+
+#### Categorical Growth Impact Figure based on CC, GR, AUC ####
 summary_data <- stats_meanCoefs |>
   group_by(host_species,isolation_day) |>
+  #Check to see if oversampled ASVs lead to bias. They do not.
+  #distinct(asv, grEffect, ccEffect, Effect) |>
   summarise(n_pos_gr = sum(grEffect == "Increased GR")/n(),
             n_0_gr = sum(grEffect == "No Significant GR Change")/n(),
             n_neg_gr = sum(grEffect == "Decreased GR")/n(),
             n_pos_cc = sum(ccEffect == "Increased CC")/n(),
             n_0_cc = sum(ccEffect == "No Significant CC Change")/n(),
             n_neg_cc = sum(ccEffect == "Decreased CC")/n(),
+            n_pos_auc = sum(Effect == "Positive")/n(),
+            n_neg_auc = sum(Effect == "Negative")/n(),
+            n_0_auc = sum(Effect == "Not Significant")/n(),
             n_pos = sum(c(n_pos_gr,n_pos_cc)),
             n_neg = sum(c(n_neg_gr, n_neg_cc)),
             n_0 = sum(c(n_0_gr,n_0_cc)),
@@ -49,10 +107,11 @@ summary_data <- stats_meanCoefs |>
          label = paste("n =", number),
          metric = case_when(str_detect(growth_outcome, "gr") ~ "Growth Rate",
                             str_detect(growth_outcome, "cc") ~ "Carrying Capacity",
+                            str_detect(growth_outcome, "auc") ~ "Area Under Curve",
                             T ~ "Total"),
          growth_outcome = case_when(str_detect(growth_outcome, "n_pos") ~ "Positive",
                                     str_detect(growth_outcome, "n_neg") ~ "Negative",
-                                    str_detect(growth_outcome, "n_0") ~ "Neutral"))
+                                    str_detect(growth_outcome, "n_0") ~ "NS"))
 
 impact_barplot <-  summary_data |>
   filter(metric == "Total") |>
@@ -67,16 +126,19 @@ impact_barplot <-  summary_data |>
   theme_pubclean() 
 
 impact_barplot_sep <-  summary_data |>
-  filter(metric %in% c("Growth Rate", "Carrying Capacity")) |>
-  ggplot(aes(x = growth_outcome, y = percent, fill = growth_outcome)) +
-  geom_col(position = "dodge", show.legend = F) +
-  facet_grid(host_species ~ metric + isolation_day) +
-  scale_x_discrete("Growth Outcome", 
-                   limits = c("Negative","Neutral","Positive")) +
-  geom_text(aes(label = label),  vjust = "inward") +
+  filter(metric %in% c("Growth Rate", "Carrying Capacity", "Area Under Curve"), number > 0) |>
+  ggplot(aes(x = isolation_day, y = percent, fill = growth_outcome)) +
+  geom_col(position = "stack", show.legend = T) +
+  facet_grid(host_species ~ metric) +
+  #scale_x_discrete("Growth Outcome", limits = c("Negative","NS","Positive")) +
+  scale_x_discrete("Isolation Day", limits = c("D3","D31")) +
+  geom_text(aes(label = label), position = position_stack(vjust = 0.4)) +
   ylab("Percent of Isolates") +
-  scale_fill_manual(values = c("Neutral" = "gray", "Positive" = "springgreen", "Negative" = "#D2042D")) +
-  theme_pubclean() 
+  scale_fill_manual(values = c("NS" = "gray", "Positive" = "springgreen", "Negative" = "#D2042D"), "Growth Outcome") +
+  theme_pubclean() +
+  theme(legend.position = "bottom",
+        legend.justification = "center") +
+  labs(title = "Growth Outcomes of Algal Hosts when Co-cultured with Associated Bacteria")
 
 png(filename = "./fig2/isolate_impact_barplot_sep.png",
     res = 450,
@@ -84,7 +146,7 @@ png(filename = "./fig2/isolate_impact_barplot_sep.png",
     units = "in",
     width = 8,
     height = 8)
-impact_barplot_sep
+impact_barplot_sep 
 dev.off()
 
 png(filename = "./fig2/isolate_impact_barplot.png",
@@ -96,6 +158,9 @@ png(filename = "./fig2/isolate_impact_barplot.png",
 impact_barplot
 dev.off()
 
+
+
+##### Supplemental Figure #####
 #### Faceted Plots ####
 grPlot_facet <- stats_pure_meanCoefs |>
   mutate(significant = ifelse(pGR_greater <= 0.05 |
