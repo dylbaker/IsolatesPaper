@@ -502,6 +502,9 @@ comparison_data <- renamed_data |>
   left_join(orig_host_data, by = c('Isolate','orig_host')) |>
   select(Isolate, new_host, orig_host, Effect, asv:se_log_auc_norm_Original)
 
+lm <- lm(mean_log_auc_norm_Transplant ~ mean_log_auc_norm_Original:orig_host, data = comparison_data)
+summary(lm)
+
 ```
 
 
@@ -551,53 +554,6 @@ png(filename = "cross_host_outcomes.png",
 scatterplot
 dev.off()
 
-## Faceted Bar Plot
-### Idea for this plot: bars colored by algal host, stat/effect with annotation above/below bar
-bar_chart <- afhData_all|>
-  filter(sampleCode != "AC", sampleCode != "MC")|>
-  group_by(Sample, Well)|>
-  distinct(Sample, .keep_all =T) |>
-  mutate(aucLogNorm_mean = log(mean(aucNorm)),
-         aucLogNorm_sd = log(sd(aucNorm)))|>
-  left_join( tax)|>
-  select(Sample, collectionCode, facet_title, algalSpecies, afh, plateCode,
-         aucLogNorm_mean, aucLogNorm_sd)|>
-  distinct()|>
-  left_join( tTestData)|>
-  # ggplot( aes(x = algalSpecies, y = aucLogNorm_mean, fill = Effect, color = afh))+
-  ggplot( aes(x = algalSpecies, y = aucLogNorm_mean, fill = afh))+ ## use this for native/non-native fill
-  geom_bar(stat = "identity")+
-  geom_errorbar(aes(ymin = aucLogNorm_mean-(2*(aucLogNorm_sd/sqrt(3))), ymax = aucLogNorm_mean+((2*aucLogNorm_sd/sqrt(3)))))+ ## error bars are currently 2* std dev, to make std error divide by sqrt # of sample size (3)
-  # ylim(-0.5, 1)+ ## Sets scale limits
-  coord_flip()+ ## Flips coordinates to make axes more readable
-  facet_wrap(vars(collectionCode))
-  
-#bar_chart
-### NOTE: using facet_title as the facet var will group by assigned genus
-### using collectionCode will group by isolate number
 
-
-## Line Plot
-line_plot <- afhData_all|>
-  filter(sampleCode != "AC", sampleCode != "MC")|>
-  mutate(logNormRFU = log(ChlA_100norm))|>
-  left_join( tax)|>
-  left_join( colors)|>
-  # group_by(Sample, read_day)|>
-  # mutate()
-  select(Sample, collectionCode, facet_title, read_day, algalSpecies, color,
-         plateCode, afh, read_timeHours, ChlA_100norm, logNormRFU)|>
-  left_join( tTestData)|>
-  ggplot( aes(x = read_timeHours, y = logNormRFU, color = algalSpecies, linetype = afh))+
-  geom_hline(yintercept = 0)+
-  # geom_point()+
-  geom_smooth(alpha = 0)+
-  # facet_wrap(vars(facet_title))+
-  facet_wrap(vars(collectionCode))+
-  scale_color_manual(values = colors$color)
-
-#line_plot
-### NOTE: using facet_title as the facet var will group by assigned genus
-### using collectionCode will group by isolate number
 
 ```
