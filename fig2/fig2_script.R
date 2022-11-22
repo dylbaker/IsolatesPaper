@@ -50,6 +50,13 @@ tukey_hsd <- long_data |>
   add_significance("p.adj") |>
   add_xy_position(x = "isolation_day", scales = "free_y") 
 
+tukey_hsd_noauc <- long_data |>
+  filter(! growth_metric == "Area Under Curve") |>
+  group_by(growth_metric, host_species) |>
+  tukey_hsd(value ~ isolation_day) |>
+  add_significance("p.adj") |>
+  add_xy_position(x = "isolation_day", scales = "free_y") 
+
 effects_boxplot <- stats_meanCoefs |>
   mutate(host_species = str_to_title(host_species)) |>
   group_by(host_species, isolation_day) |>
@@ -73,6 +80,30 @@ effects_boxplot <- stats_meanCoefs |>
   labs(caption = get_pwc_label(tukey_hsd)) +
   theme_pubclean()
 
+effects_boxplot_noauc <- stats_meanCoefs |>
+  mutate(host_species = str_to_title(host_species)) |>
+  group_by(host_species, isolation_day) |>
+  pivot_longer(c(mean_logNormGR, mean_logNormCC, log_auc_norm), names_to = "growth_metric", values_to = "value") |>
+  select(Isolate, host_species, isolation_day, growth_metric, value) |>
+  mutate(growth_metric = case_when(growth_metric == "log_auc_norm" ~ "Area Under Curve",
+                                   growth_metric == "mean_logNormCC" ~ "Carrying Capacity",
+                                   growth_metric == "mean_logNormGR" ~ "Growth Rate")) |>
+  filter(growth_metric != "Area Under Curve") |>
+  ggplot(aes(x = isolation_day, y = value, color = isolation_day)) +
+  geom_boxplot(show.legend = F) +
+  #ylim(-1, 1) +
+  coord_cartesian(ylim = c(-1,1)) + 
+  facet_grid(host_species ~ growth_metric) +
+  ylab("Log Normalized Value") +
+  xlab("Isolation Day") +
+  geom_hline(yintercept = 0, color = "grey", linetype = "longdash") +
+  stat_pvalue_manual(tukey_hsd_noauc,
+                     label = "p.adj.signif",
+                     tip.length = 0,
+                     hide.ns = T) +
+  labs(caption = get_pwc_label(tukey_hsd_noauc)) +
+  theme_pubclean()
+
 png(filename = "./fig2/effects_barplot.png",
     res = 450,
     type = "cairo",
@@ -82,17 +113,25 @@ png(filename = "./fig2/effects_barplot.png",
 effects_boxplot
 dev.off()
 
+png(filename = "./fig2/effects_barplot_noauc.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 8,
+    height = 8) 
+effects_boxplot_noauc
+dev.off()
 #### Categorical Growth Impact Figure based on CC, GR, AUC ####
 summary_data <- stats_meanCoefs |>
   group_by(host_species,isolation_day) |>
   #Check to see if oversampled ASVs lead to bias. They do not.
   #distinct(asv, grEffect, ccEffect, Effect) |>
-  summarise(n_pos_gr = sum(grEffect == "Increased GR")/n(),
-            n_0_gr = sum(grEffect == "No Significant GR Change")/n(),
-            n_neg_gr = sum(grEffect == "Decreased GR")/n(),
-            n_pos_cc = sum(ccEffect == "Increased CC")/n(),
-            n_0_cc = sum(ccEffect == "No Significant CC Change")/n(),
-            n_neg_cc = sum(ccEffect == "Decreased CC")/n(),
+  summarise(n_pos_gr = sum(grEffect == "Positive")/n(),
+            n_0_gr = sum(grEffect == "Not Significant")/n(),
+            n_neg_gr = sum(grEffect == "Negative")/n(),
+            n_pos_cc = sum(ccEffect == "Positive")/n(),
+            n_0_cc = sum(ccEffect == "Not Significant")/n(),
+            n_neg_cc = sum(ccEffect == "Negative")/n(),
             n_pos_auc = sum(Effect == "Positive")/n(),
             n_neg_auc = sum(Effect == "Negative")/n(),
             n_0_auc = sum(Effect == "Not Significant")/n(),
@@ -140,6 +179,21 @@ impact_barplot_sep <-  summary_data |>
         legend.justification = "center") +
   labs(title = "Growth Outcomes of Algal Hosts when Co-cultured with Associated Bacteria")
 
+impact_barplot_sep_noauc <-  summary_data |>
+  filter(metric %in% c("Growth Rate", "Carrying Capacity"), number > 0) |>
+  ggplot(aes(x = isolation_day, y = percent, fill = growth_outcome)) +
+  geom_col(position = "stack", show.legend = T) +
+  facet_grid(host_species ~ metric) +
+  #scale_x_discrete("Growth Outcome", limits = c("Negative","NS","Positive")) +
+  scale_x_discrete("Isolation Day", limits = c("D3","D31")) +
+  geom_text(aes(label = label), position = position_stack(vjust = 0.4)) +
+  ylab("Percent of Isolates") +
+  scale_fill_manual(values = c("NS" = "gray", "Positive" = "springgreen", "Negative" = "#D2042D"), "Growth Outcome") +
+  theme_pubclean() +
+  theme(legend.position = "bottom",
+        legend.justification = "center") +
+  labs(title = "Growth Outcomes of Algal Hosts when Co-cultured with Associated Bacteria")
+
 png(filename = "./fig2/isolate_impact_barplot_sep.png",
     res = 450,
     type = "cairo",
@@ -147,6 +201,15 @@ png(filename = "./fig2/isolate_impact_barplot_sep.png",
     width = 8,
     height = 8)
 impact_barplot_sep 
+dev.off()
+
+png(filename = "./fig2/isolate_impact_barplot_sep_noauc.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 8,
+    height = 8)
+impact_barplot_sep_noauc
 dev.off()
 
 png(filename = "./fig2/isolate_impact_barplot.png",

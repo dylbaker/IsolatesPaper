@@ -370,15 +370,15 @@ statsList <- foreach(i = 1:length(coefList_4t), .packages = c("tidyverse", "broo
 
 stats <- bind_rows(statsList)|>
   dplyr::select(Isolate, host_species, plate_no, pCC_greater, pCC_less, pGR_greater, pGR_less)|>
-  mutate(ccEffect = ifelse(pCC_greater <= 0.05 & pCC_less > 0.05, "Increased CC",
-                           ifelse(pCC_greater > 0.05 & pCC_less <= 0.05, "Decreased CC",
-                                  ifelse(pCC_greater > 0.05 & pCC_less > 0.05,
-                                         "No Significant CC Change", "Error"))),
-         grEffect = ifelse(pGR_greater <= 0.05 & pGR_less > 0.05, "Increased GR",
-                           ifelse(pGR_greater > 0.05 & pGR_less <= 0.05, "Decreased GR",
-                                  ifelse(pGR_greater > 0.05 & pGR_less > 0.05,
-                                         "No Significant GR Change", "Error"))),
-         annotation = paste(ccEffect, grEffect, sep = "\n"))
+  mutate(ccEffect = case_when(pCC_greater <= 0.05 & pCC_less > 0.05 ~ "Positive",
+                              pCC_greater > 0.05 & pCC_less <= 0.05 ~ "Negative",
+                              pCC_greater > 0.05 & pCC_less > 0.05 ~ "Not Significant",
+                              T ~ "Error"),
+         grEffect = case_when(pGR_greater <= 0.05 & pGR_less > 0.05 ~ "Positive",
+                              pGR_greater > 0.05 & pGR_less <= 0.05 ~ "Negative",
+                              pGR_greater > 0.05 & pGR_less > 0.05 ~ "Not Significant",
+                              T ~ "Error"),
+         annotation = paste(ccEffect,"CC", grEffect,"GR" ,sep = " "))
 
 stats_coefs <- full_join(stats, coefs)|>
   grubbs() # This test added here when normalization was added 01/19/2022 -JL
