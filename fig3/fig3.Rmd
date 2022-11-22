@@ -223,6 +223,7 @@ statsList <- foreach(i = 1:length(coefList_4t), .packages = c("tidyverse", "broo
     plate <- unique(tt_df$plate_no)
     Isolate <- unique(tt_df$collectionCode)
     afh <- unique(tt_df$afh)
+    #Comparing only to axenic controls from the same plate to control for plate effects
     ac_df <- ACcoefs |> filter(hostCode == new_host & plate_no == plate)
     cc_greater <- tidy(t.test(tt_df$asymptote, 
                               ac_df$asymptote, 
@@ -257,15 +258,15 @@ statsList <- foreach(i = 1:length(coefList_4t), .packages = c("tidyverse", "broo
 
 stats <- bind_rows(statsList)|>
   dplyr::select(Isolate, new_host, orig_host, plate_no, pCC_greater, pCC_less, pGR_greater, pGR_less)|>
-  mutate(ccEffect = ifelse(pCC_greater <= 0.05 & pCC_less > 0.05, "Increased CC",
-                           ifelse(pCC_greater > 0.05 & pCC_less <= 0.05, "Decreased CC",
-                                  ifelse(pCC_greater > 0.05 & pCC_less > 0.05,
-                                         "No Significant CC Change", "Error"))),
-         grEffect = ifelse(pGR_greater <= 0.05 & pGR_less > 0.05, "Increased GR",
-                           ifelse(pGR_greater > 0.05 & pGR_less <= 0.05, "Decreased GR",
-                                  ifelse(pGR_greater > 0.05 & pGR_less > 0.05,
-                                         "No Significant GR Change", "Error"))),
-         annotation = paste(ccEffect, grEffect, sep = "\n"))
+  mutate(ccEffect = case_when(pCC_greater <= 0.05 & pCC_less > 0.05 ~ "Positive",
+                              pCC_greater > 0.05 & pCC_less <= 0.05 ~ "Negative",
+                              pCC_greater > 0.05 & pCC_less > 0.05 ~ "Neutral",
+                                        T ~ "Error"),
+         grEffect = case_when(pGR_greater <= 0.05 & pGR_less > 0.05 ~ "Positive",
+                              pGR_greater > 0.05 & pGR_less <= 0.05 ~ "Negative",
+                              pGR_greater > 0.05 & pGR_less > 0.05 ~ "Neutral",
+                                        T ~ "Error"),
+         annotation = paste(ccEffect,"CC", grEffect,"GR" ,sep = " "))
 
 library(outliers)
 stats_coefs <- left_join(stats, coefs, by = c("Isolate" = "collectionCode", 
@@ -282,32 +283,24 @@ stats_coefs <- left_join(stats, coefs, by = c("Isolate" = "collectionCode",
 ac_coefs <- stats_coefs |> 
   filter(Isolate == "AC" & outlier != T)|>
   group_by(new_host, plate_no)|>
-  mutate(nSamples = n(),
+  summarise(nSamples = n(),
          meanCC = mean(asymptote),
          meanGR = mean(growthrate))|>
-  ungroup()|>
-  # These columns are empty, as there is no statistics data for axenic controls samples
-  dplyr::select(-pCC_greater, -pCC_less, -pGR_greater, -pGR_less,
-                -ccEffect, -grEffect, -annotation)
+  ungroup()
 
 stats_coefs_split <- stats_coefs |>
-  filter(Isolate != "AC" & Isolate != "MC")|>
-  mutate(split_var = paste(Isolate, plate_no, sep = "_"))%>%
-  split(., .$split_var)
+  filter(Isolate != "AC" & Isolate != "MC") %>%
+  split(list(.$Isolate, .$plate_no, .$new_host), drop = T)
 
 for(i in 1:length(stats_coefs_split)){
   df <- stats_coefs_split[[i]]
   plate <- unique(df$plate_no)
   host <- unique(df$new_host)
   ac <- ac_coefs |>
-    filter(new_host == host & plate_no == plate & asymptote >= 0)|>
-    summarize(acCC = mean(asymptote),
-              acGR = mean(growthrate))
-  acCC <- as.numeric(ac$acCC)
-  acGR <- as.numeric(ac$acGR)
+    filter(new_host == host & plate_no == plate)
   stats_coefs_split[[i]] <- df |>
-    mutate(normCC = asymptote/acCC,
-           normGR = growthrate/acGR,
+    mutate(normCC = asymptote/ac$meanCC,
+           normGR = growthrate/ac$meanGR,
            logNormCC = log(normCC),
            logNormGR = log(normGR))
 }
@@ -415,11 +408,13 @@ auc_data_norm <- sample_aucData |>
 ```{r Map to Taxonomy Data}
 #Rename to current naming conventions to match up to taxonomy data
 sam.dataMiseqNames <- auc_data_norm |>
+  inner_join(stats_normCoefs) |>
   mutate(Isolate = str_replace(Isolate, ",|\\.", "point"),
          Isolate = str_replace(Isolate, "DF", "D31"),
          seq_type = "Miseq") 
 
 sam.dataJinny <- auc_data_norm |> 
+  inner_join(stats_normCoefs) |>
   filter(str_detect(Isolate, "DF") & orig_host == "CS") |>
   #Match up experimental Isolates to the ones Jinny Sequenced that are missing
   mutate(Isolate = case_when(Isolate == "10DF" ~ "S10OMO",
@@ -458,6 +453,7 @@ sam.dataJinny <- auc_data_norm |>
   filter(!is.na(Isolate))
 
 sam.dataSangerNames <- auc_data_norm |>
+  inner_join(stats_normCoefs) |>
   mutate(seq_type = "Sanger",
          Isolate = str_replace(Isolate, "D3", "_D3"),
          Isolate = str_replace(Isolate, ",|\\.", "point"),
@@ -481,15 +477,21 @@ renamed_data <- sam.data |>
                                  T ~ "Transplant")) |>
   group_by(plateCode, sampleCode) |>
   mutate(mean_log_auc_norm = mean(log_auc_norm),
-            se_log_auc_norm = sd(log_auc_norm)/sqrt(n())) |>
+         se_log_auc_norm = sd(log_auc_norm)/sqrt(n()),
+         mean_log_norm_gr = mean(logNormGR),
+         se_log_norm_gr = sd(logNormGR)/sqrt(n()),
+         mean_log_norm_cc = mean(logNormCC),
+         se_log_norm_cc = sd(logNormCC)/sqrt(n()))|>
   distinct(sampleCode, plateCode, .keep_all =  T) |>
   ungroup()
 
 orig_host_data <- renamed_data |> 
   filter(host_status == "Original") |>
-  pivot_wider(names_from = c(host_status), values_from = c(mean_log_auc_norm, se_log_auc_norm)) |>
-  select(Isolate, orig_host, mean_log_auc_norm_Original, se_log_auc_norm_Original, Effect) |>
-  rename("recent_effect" = Effect)
+  pivot_wider(names_from = c(host_status), values_from = c(mean_log_auc_norm, se_log_auc_norm,
+                                                           mean_log_norm_gr, se_log_norm_gr,
+                                                           mean_log_norm_cc, se_log_norm_cc)) |>
+  select(Isolate, orig_host, mean_log_auc_norm_Original:se_log_norm_cc_Original)
+  #rename("recent_effect" = Effect)
 
 orig_host_comp <- filter(tax_full, Isolate %in% orig_host_data$Isolate) |>
   select(Isolate, host_species, grEffect, ccEffect, Effect, mixed, seq_type) |>
@@ -498,12 +500,19 @@ orig_host_comp <- filter(tax_full, Isolate %in% orig_host_data$Isolate) |>
   
 comparison_data <- renamed_data |>
   filter(host_status == "Transplant") |>
-  pivot_wider(names_from = c(host_status), values_from = c(mean_log_auc_norm, se_log_auc_norm)) |>
+  pivot_wider(names_from = c(host_status), values_from = c(mean_log_auc_norm, se_log_auc_norm,
+                                                           mean_log_norm_gr, se_log_norm_gr,
+                                                           mean_log_norm_cc, se_log_norm_cc)) |>
   left_join(orig_host_data, by = c('Isolate','orig_host')) |>
-  select(Isolate, new_host, orig_host, Effect, asv:se_log_auc_norm_Original)
+  select(Isolate, new_host, orig_host, Effect,grEffect,ccEffect, asv:se_log_norm_cc_Original)
 
-lm <- lm(mean_log_auc_norm_Transplant ~ mean_log_auc_norm_Original:orig_host, data = comparison_data)
-summary(lm)
+lm_auc <- lm(mean_log_auc_norm_Transplant ~ mean_log_auc_norm_Original:orig_host, data = comparison_data)
+summary(lm_auc)
+lm_gr <- lm(mean_log_norm_gr_Transplant ~ mean_log_norm_gr_Original:orig_host, data = comparison_data)
+summary(lm_gr)
+lm_cc <- lm(mean_log_norm_cc_Transplant ~ mean_log_norm_cc_Original:orig_host, data = comparison_data)
+summary(lm_cc)
+
 
 ```
 
@@ -545,6 +554,73 @@ scatterplot <- ggplot(comparison_data,
         legend.box = "vertical") +
   labs(title = "Growth Outcomes of Original vs Transplanted Host Algae")
 
+scatterplot_cc <- ggplot(comparison_data,
+                        aes( x = mean_log_norm_cc_Original, 
+                         y = mean_log_norm_cc_Transplant, color = ccEffect, shape = new_host)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("Not Significant" = "gray",
+                                "Positive" = "#096C72", 
+                                "Negative" = "#D2042D"), 
+                     "Growth Outcome on Transplant Host") +
+  scale_shape_manual(labels = c("CS" ="Chorella",
+                                "CM" = "Coelastrum",
+                               "SA"= "Scenedesmus",
+                               "MM" = "Monoraphidium",
+                                "SC" = "Selenastrum"),
+                       values = c("CS" = 0,
+                                  "CM" = 1,
+                                  "SA" = 2,
+                                  "MM" = 5,
+                                  "SC" = 6),
+                       name = "Transplant Host") +
+  geom_hline(yintercept = 0, color = "grey", linetype = "longdash") +
+  geom_vline(xintercept = 0, color = "grey", linetype = "longdash") +
+  ylab("Log Norm CC Transplant Host") +
+  xlab("Log Norm CC Original Host") +
+  geom_errorbar(aes(ymin = mean_log_norm_cc_Transplant - se_log_norm_cc_Transplant ,
+                    ymax = mean_log_norm_cc_Transplant + se_log_norm_cc_Transplant)) +
+  geom_errorbarh(aes(xmin = mean_log_norm_cc_Original - se_log_norm_cc_Original,
+                     xmax = mean_log_norm_cc_Original + se_log_norm_cc_Original)) +
+  theme_pubclean() +
+  theme(legend.position = "bottom",
+        legend.justification = "center",
+        legend.box = "vertical") +
+  labs(title = "Carrying Capacity Outcomes of Original vs Transplanted Host Algae")
+
+
+scatterplot_gr <- ggplot(comparison_data,
+                        aes( x = mean_log_norm_gr_Original, 
+                         y = mean_log_norm_gr_Transplant, color = grEffect, shape = new_host)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("Not Significant" = "gray",
+                                "Positive" = "#096C72", 
+                                "Negative" = "#D2042D"), 
+                     "Growth Outcome on Transplant Host") +
+  scale_shape_manual(labels = c("CS" ="Chorella",
+                                "CM" = "Coelastrum",
+                               "SA"= "Scenedesmus",
+                               "MM" = "Monoraphidium",
+                                "SC" = "Selenastrum"),
+                       values = c("CS" = 0,
+                                  "CM" = 1,
+                                  "SA" = 2,
+                                  "MM" = 5,
+                                  "SC" = 6),
+                       name = "Transplant Host") +
+  geom_hline(yintercept = 0, color = "grey", linetype = "longdash") +
+  geom_vline(xintercept = 0, color = "grey", linetype = "longdash") +
+  ylab("Log Norm GR Transplant Host") +
+  xlab("Log Norm GR Original Host") +
+  geom_errorbar(aes(ymin = mean_log_norm_gr_Transplant - se_log_norm_gr_Transplant ,
+                    ymax = mean_log_norm_gr_Transplant + se_log_norm_gr_Transplant)) +
+  geom_errorbarh(aes(xmin = mean_log_norm_gr_Original - se_log_norm_gr_Original,
+                     xmax = mean_log_norm_gr_Original + se_log_norm_gr_Original)) +
+  theme_pubclean() +
+  theme(legend.position = "bottom",
+        legend.justification = "center",
+        legend.box = "vertical") +
+  labs(title = "Growth Rate Outcomes of Original vs Transplanted Host Algae")
+
 png(filename = "cross_host_outcomes.png",
     res = 450,
     type = "cairo",
@@ -554,6 +630,22 @@ png(filename = "cross_host_outcomes.png",
 scatterplot
 dev.off()
 
+png(filename = "cross_host_outcomes_cc.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 8,
+    height = 8)
+scatterplot_cc
+dev.off()
 
+png(filename = "cross_host_outcomes_gr.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 8,
+    height = 8)
+scatterplot_gr
+dev.off()
 
 ```
