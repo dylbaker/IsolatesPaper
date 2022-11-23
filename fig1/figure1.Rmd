@@ -67,7 +67,9 @@ GRBC_counts <- GRBC_data |>
   rename("total_count_group" = n)
                               
 GRBC_data <- inner_join(GRBC_data, GRBC_counts, by = "Group") |>
-  mutate(rel_abund = count/total_count_group)
+  mutate(Isolate_Number = case_when(seq_type == "Sanger" ~ str_remove(Isolate_Number,"_"), 
+                                 T ~ Isolate_Number),
+           rel_abund = count/total_count_group)
 
 #We need the number from this output to standardize counts below.
 Phycosphere_counts <- phycosphere_data |>
@@ -100,14 +102,14 @@ Phycosphere_asv_D31 <- Phycosphere_asv_count |>
 ```{r Phycosphere OTU D3/D31 Filtering 0.22 um}
 #Separate D3 and D31 data
 D3_data <- inner_join(Phycosphere_asv_D3, Phycosphere_tax) |> #Groups by asv automatically
-  mutate(time = "D3") |>
-  mutate(genus=str_replace_all(string=genus,
-    pattern="Allorhizobium-Neorhizobium-Pararhizobium-Rhizobium", replacement="A-N-P-R")) 
+  mutate(time = "D3",
+         genus=str_replace_all(string=genus,
+               pattern="Allorhizobium-Neorhizobium-Pararhizobium-Rhizobium", replacement="A-N-P-R"))
 
 D31_data <- inner_join(Phycosphere_asv_D31, Phycosphere_tax) |> #Groups by otu automatically
-  mutate(time = "D31") |>
-  mutate(genus=str_replace_all(string=genus,
-    pattern="Allorhizobium-Neorhizobium-Pararhizobium-Rhizobium", replacement="A-N-P-R")) 
+  mutate(time = "D31",
+         genus=str_replace_all(string=genus,
+               pattern="Allorhizobium-Neorhizobium-Pararhizobium-Rhizobium", replacement="A-N-P-R")) 
 
 #Recombine as one dataframe for contamination checks
 agg_genus_data <- rbind(D3_data, D31_data)
@@ -120,12 +122,12 @@ length(unique(agg_genus_data$genus))
 
 #Filter genus hits from GRBC silva and freshwater database hits
 Phycosphere_GRBC_D3 <- inner_join(GRBC_data, D3_data, by = c("asv", "host_species")) |>
-  filter(!str_detect(Isolate_Number, "D31")) |>
+  filter(capture_day == "D3") |>
   select(asv, host_species, color) |>
   distinct() 
 
 Phycosphere_GRBC_D31 <- inner_join(GRBC_data, D31_data, by = c("asv", "host_species")) |>
-  filter(str_detect(Isolate_Number, "D31"))  |>
+  filter(capture_day == "D31")  |>
   select(asv, host_species, color) |>
   distinct()
 
@@ -171,8 +173,6 @@ agg_genus_data_D31_color <- D31_data |>
 
 
 D3_plots_combined <- agg_genus_data_D3_color |>
-  # group_by(asv) |>
-  # mutate(subset = ifelse(rel_abund > 0.01, "Abundant","Rare (<1% of Total Reads Within a Host Phycosphere)")) |>
   ggplot(aes(x = reorder_within(asv, -rel_abund, fun = sum, within = subset), y = rel_abund, fill = host_species)) +
   geom_col() +
   scale_x_reordered() +
@@ -228,6 +228,88 @@ dev.off()
 
 ```
 
+```{r Additional Analyses}
+#How many ASVs out of the total phycosphere were represented in our collection?
+D3_hits <- GRBC_data |>
+  #filter(capture_day == "D3") |>
+  select(asv, host_species) |>
+  distinct(asv, host_species) |>
+  inner_join(D3_data, by = c("asv", "host_species")) |>
+  summarise(rep_asvs = sum(rel_abund)/(n_distinct(host_species)))
 
 
+D31_hits <- GRBC_data |>
+  #filter(capture_day == "D31") |>
+  select(asv, host_species) |>
+  distinct(asv, host_species) |>
+  inner_join(D31_data, by = c("asv", "host_species")) |>
+  summarise(rep_asvs = sum(rel_abund)/n_distinct(host_species)) 
 
+#~18.4% so about a 5th of the diversity represented we have captured with our collection
+all_hits <- GRBC_data |>
+  select(asv, host_species) |>
+  distinct(asv, host_species) |>
+  inner_join(agg_genus_data, by = c("asv", "host_species")) |>
+  summarise(rep_asvs = sum(rel_abund)/n_distinct(Group)) 
+
+#Look at % of asvs that are present in more than three host phycospheres at D3 that are >1% abundant
+D3_shared_asvs <- D3_data |>
+  filter(rel_abund > 0.01) |>
+  group_by(asv) |>
+  summarise(shared_hosts = n_distinct(host_species)) |>
+  summarise(percent_asv = sum(shared_hosts >= 3)/n())
+
+D31_shared_asvs <- D31_data |>
+  filter(rel_abund > 0.01) |>
+  group_by(asv) |>
+  summarise(shared_hosts = n_distinct(host_species)) |>
+  summarise(percent_asv = sum(shared_hosts >= 3)/n())
+
+pure_isolates <- GRBC_data |>
+  left_join(Phycosphere_tax, by = "asv") |>
+  filter(rel_abund >= .1) |>
+  group_by(Group) |>
+  mutate(numasvs = n(),
+         mixed = ifelse(numasvs > 1, T, F)) |>
+  filter(mixed == F) |>
+  ungroup() |>
+  distinct(Isolate_Number, .keep_all = T) |>
+  #Duplicate isolates that need to be filtered by hand.
+  filter(!Group %in% c('11_DF','S15','S16','S20','S25','34_DF','S3','6_DF','7_DF','8_DF','S9W'))
+
+frequency <- pure_isolates |>
+  group_by(capture_day) |>
+  summarise(n = n())
+
+mixed_isolates <- GRBC_data |>
+  left_join(Phycosphere_tax, by = "asv") |>
+  filter(rel_abund >= .1) |>
+  group_by(Group) |>
+  mutate(numasvs = n(),
+         mixed = ifelse(numasvs > 1, T, F)) |>
+  filter(mixed == T) 
+
+frequency_mixed <- mixed_isolates |>
+  distinct(Group, .keep_all = T) |>
+  group_by(capture_day) |>
+  summarise(n = n())
+
+duplicates <- pure_isolates |>
+  group_by(asv,capture_day) |>
+  summarise(distinct_hosts = n_distinct(host_species),
+            distinct_isolates = n_distinct(Group)) |>
+  ungroup() |>
+  arrange(distinct_hosts, desc = T) |>
+  pivot_wider(names_from = c(capture_day, distinct_hosts), values_from = distinct_isolates) |>
+  summarise(across(D31_1:D3_5, ~sum(.x, na.rm = T))) |>
+  pivot_longer(everything()) |>
+  separate(name, into = c("capture_day","distinct_hosts"), sep = "_") |>
+  left_join(frequency) |>
+  mutate(fraction = value/n) |>
+  group_by(distinct_hosts) |>
+  summarise(total_fraction = mean(fraction))
+  
+pure_isolate_tax <- pure_isolates |>
+  select(Isolate_Number, asv, host_species, capture_day, domain:genus)
+write.csv(pure_isolate_tax, "GRBC_pure_isolate_taxonomy.csv")
+```

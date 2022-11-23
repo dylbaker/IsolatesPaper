@@ -538,13 +538,15 @@ taxTable <- as.data.frame(all.data@tax_table)|>
   rownames_to_column(var = "asv")
 
 sampleData <- sam.dataDF |>
-  filter(! Isolate == "199point1_D3" & ! Isolate == "AC") %>%
-  distinct(.,Isolate, .keep_all = TRUE)
+  filter(! Isolate %in% c('199point1_D3','11_DF','S15','S16','S20','S25','34_DF','S3','6_DF','7_DF','8_DF','S9W') &
+  ! Isolate == "AC") |>
+  distinct(Isolate, .keep_all = TRUE)
 
 asvTable <- as.data.frame(all.data@otu_table)|>
   rownames_to_column(var = "asv")|>
   pivot_longer(!asv, names_to = "Isolate", values_to = "count")|>
-  filter(count != 0)|>
+  filter(count != 0 & 
+           ! Isolate %in% c('199point1_D3','11_DF','S15','S16','S20','S25','34_DF','S3','6_DF','7_DF','8_DF','S9W'))|>
   group_by(Isolate)|>
   mutate(totalReads = sum(count),
          asvMatches = n(),
