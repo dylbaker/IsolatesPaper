@@ -19,9 +19,6 @@ stats_meanCoefs <- read.csv("./csv_files/collection_tax_data_pureOnly.csv") |>
          order = factor(parse_number(asv)),
          isolation_day = ifelse(str_detect(Isolate, "D31|DF|S"), "D31", "D3"),
          mean_logNormGR = log(mean_normGR)) |>
-  #distinct(exact_isolate, .keep_all = T) |>
-  distinct(Isolate, .keep_all = T)|>
-  #anti_join(contaminates, by = "asv") |>
   arrange(order, desc = TRUE) 
 
 stats_pure_meanCoefs <- filter(stats_meanCoefs, mixed == F)

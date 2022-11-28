@@ -1,0 +1,128 @@
+---
+title: "Figure 4, Isolates Paper"
+author: "Dylan Baker"
+output:
+  html_document:
+    code_folding: hide
+    highlight: haddock
+    keep_md: yes
+    number_sections: yes
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+      toc_depth: 3
+  pdf_document:
+    toc: yes
+---
+
+```{r packages}
+require("knitr")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("ggtree", force = TRUE)
+BiocManager::install("ggtreeExtra", force = TRUE)
+install.packages("ggplot2")
+library(tidyverse)
+library(ggtree)
+library(ggtreeExtra)
+library(ape)
+library(tidytree)
+library(ggnewscale)
+```
+
+```{r data import}
+isolate_tax <- read_csv("../fig1/GRBC_pure_isolate_taxonomy.csv") |>
+  select(- ...1)
+
+isolate_effects <- read_csv("../csv_files/collection_tax_data_pureOnly.csv") |>
+  select(Isolate, asv, host_species, ccEffect, grEffect, Effect) |>
+  mutate(host_species = str_to_title(host_species)) |>
+  filter(!Isolate == "122D31")
+  
+
+missing <- tax_effects |>
+  filter(is.na(Isolate_Number)) |>
+  mutate(Isolate = str_remove(str_replace(Group, "F", "31"), "_")) |>
+  select(Group, Isolate)
+
+recovered<- isolate_tax |>
+  right_join(missing, by = c("Isolate_Number" = "Isolate")) |>
+  rename("Group" = "Group.y") |>
+  select(-Group.x)
+
+isolate_tax <- rbind(isolate_tax, recovered)
+
+
+tax_effects <- inner_join(isolate_tax,isolate_effects, by = c("Group" = "Isolate", "asv", "host_species"))
+
+tree <- read.tree("../mothur_outputs/GRBC_seqs/final.pick.asv.braycurtis.ASV.tre")
+
+to_keep <- tax_effects$Group
+
+pruned_tree <- keep.tip(tree, to_keep)
+
+p <- ggtree(pruned_tree, layout = "circular") %<+% tax_effects +
+  geom_fruit(aes(y = label, fill = host_species),
+             geom = geom_tile,
+             width=0.05,
+             pwidth = 0.1,
+             color="white",
+             inherit.aes = F,
+             offset = .4
+  ) +
+  scale_fill_manual(
+    name = "Host Algae",
+    values = c("Chlorella"  = "#7FC97F",
+  "Coelastrum" = "#BEAED4",
+  "Scenedesmus" = "#E0115F",
+  "Monoraphidium"="#FDC086",
+  "Selenastrum"= "#386CB0"),
+   na.translate = F,
+   guide=guide_legend(keywidth=0.5,
+                              keyheight=0.5,
+                              order=1
+                             )) +
+  geom_tiplab(#aes(color = order),
+              align=TRUE,
+              size = 2,
+                   linesize=0.3,
+                   show.legend=FALSE,
+              geom = "text",
+              offset = .05
+              ) +
+  new_scale_fill()
+  
+  
+
+p2 <- p + 
+  geom_fruit(aes(y = label, fill = Effect),
+             geom = geom_tile,
+             width=0.05,
+             pwidth = 0.1,
+             color="white",
+             inherit.aes = F,
+             offset = 0.1
+  ) +
+  scale_fill_manual(
+    name = "Growth Outcome",
+    values = c("Negative" = "#D2042D",
+               "Not Significant" = "gray", 
+               "Positive" = "springgreen"),
+   na.translate = F,
+   guide=guide_legend(keywidth=0.5,
+                              keyheight=0.5,
+                              order=2
+                             ))
+
+png(filename = "isolate_tree_effects.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 12,
+    height = 12)
+p2
+dev.off()
+```

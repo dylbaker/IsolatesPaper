@@ -310,6 +310,6 @@ duplicates <- pure_isolates |>
   summarise(total_fraction = mean(fraction))
   
 pure_isolate_tax <- pure_isolates |>
-  select(Isolate_Number, asv, host_species, capture_day, domain:genus)
+  select(Group, Isolate_Number, asv, host_species, capture_day, domain:genus)
 write.csv(pure_isolate_tax, "GRBC_pure_isolate_taxonomy.csv")
 ```
