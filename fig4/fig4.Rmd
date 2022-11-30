@@ -41,7 +41,8 @@ isolate_effects <- read_csv("../csv_files/collection_tax_data_pureOnly.csv") |>
   select(Isolate, asv, host_species, ccEffect, grEffect, Effect) |>
   mutate(host_species = str_to_title(host_species)) |>
   filter(!Isolate == "122D31")
-  
+
+tax_effects <- right_join(isolate_tax,isolate_effects, by = c("Group" = "Isolate"))
 
 missing <- tax_effects |>
   filter(is.na(Isolate_Number)) |>
@@ -56,16 +57,26 @@ recovered<- isolate_tax |>
 isolate_tax <- rbind(isolate_tax, recovered)
 
 
-tax_effects <- inner_join(isolate_tax,isolate_effects, by = c("Group" = "Isolate", "asv", "host_species"))
+tax_effects <- inner_join(isolate_tax,isolate_effects, by = c("Group" = "Isolate", "asv", "host_species")) |>
+  mutate(Group = str_replace(Group, "point", "p"))
+  as_tibble()
 
-tree <- read.tree("../mothur_outputs/GRBC_seqs/final.pick.asv.braycurtis.ASV.tre")
+tree <- read.tree("../mothur_outputs/GRBC_seqs/final.asv.rep.tree.nwk") 
+tree[["node.label"]] <- NULL
 
-to_keep <- tax_effects$Group
+tree_data <- as.treedata(tree) |>
+  full_join(tax_effects, by = "label") 
 
-pruned_tree <- keep.tip(tree, to_keep)
+tidy_tree <- as_tibble(tree_data) |>
+  rename('group' = 'label',
+         'label' = 'Group')
 
-p <- ggtree(pruned_tree, layout = "circular") %<+% tax_effects +
-  geom_fruit(aes(y = label, fill = host_species),
+tree <- as.phylo(tidy_tree)
+
+
+
+p <- ggtree(tree_data, layout = "circular")   +
+  geom_fruit(aes(y = group, fill = host_species),
              geom = geom_tile,
              width=0.05,
              pwidth = 0.1,
