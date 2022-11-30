@@ -18,19 +18,24 @@ output:
 
 ```{r packages}
 require("knitr")
+#Only run once, then comment out, takes a few minutes to run. Choose yes and all for updates to packages
 
-if (!require("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
-
-BiocManager::install("ggtree", force = TRUE)
-BiocManager::install("ggtreeExtra", force = TRUE)
-install.packages("ggplot2")
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# 
+# BiocManager::install("ggtree", force = TRUE)
+# BiocManager::install("ggtreeExtra", force = TRUE)
+# install.packages("ggplot2")
 library(tidyverse)
 library(ggtree)
 library(ggtreeExtra)
 library(ape)
 library(tidytree)
 library(ggnewscale)
+library(RColorBrewer)
+
+#Allows us to make a color palette with an arbitrary number of colors.
+getPalette = colorRampPalette(brewer.pal(8,"Accent"))
 ```
 
 ```{r data import}
@@ -61,22 +66,23 @@ tax_effects <- inner_join(isolate_tax,isolate_effects, by = c("Group" = "Isolate
   mutate(Group = str_replace(Group, "point", "p"))
   as_tibble()
 
-tree <- read.tree("../mothur_outputs/GRBC_seqs/final.asv.rep.tree.nwk") 
-tree[["node.label"]] <- NULL
-
-tree_data <- as.treedata(tree) |>
-  full_join(tax_effects, by = "label") 
-
-tidy_tree <- as_tibble(tree_data) |>
-  rename('group' = 'label',
-         'label' = 'Group')
-
-tree <- as.phylo(tidy_tree)
+tree <- read.tree("../mothur_outputs/GRBC_seqs/isolates.asv.nwk") 
+ruben_tree <- read.tree("../mothur_outputs/GRBC_seqs/isolates.asv.ruben.nwk")
 
 
+# tree_data <- as.treedata(tree) |>
+#   full_join(tax_effects, by = "label") 
 
-p <- ggtree(tree_data, layout = "circular")   +
-  geom_fruit(aes(y = group, fill = host_species),
+# tidy_tree <- as_tibble(tree_data) |>
+#   rename('group' = 'label',
+#          'label' = 'Group')
+# 
+# tree <- as.phylo(tidy_tree)
+
+
+
+p <- ggtree(tree, layout = "circular") %<+% tax_effects   +
+  geom_fruit(aes(y = Group, fill = host_species),
              geom = geom_tile,
              width=0.05,
              pwidth = 0.1,
@@ -128,7 +134,104 @@ p2 <- p +
                               order=2
                              ))
 
+r <- ggtree(ruben_tree, layout = "circular", ladderize = T) %<+% tax_effects   +
+  geom_fruit(aes(y = Group, fill = order),
+             geom = geom_tile,
+             width=0.05,
+             pwidth = 0.1,
+             color="white",
+             inherit.aes = F,
+             offset = .3
+  ) +
+  scale_fill_manual(values = getPalette(15),
+    name = "Order",
+   guide=guide_legend(keywidth=0.5,
+                              keyheight=0.5,
+                              order=3
+                             )) +
+  geom_tiplab(aes(color = host_species),
+              align=TRUE,
+              size = 2,
+              linesize=0.3,
+              geom = "text",
+              offset = .05
+              ) +
+  scale_color_manual(
+    name = "Host Algae",
+    values = c("Chlorella"  = "#7FC97F",
+  "Coelastrum" = "#BEAED4",
+  "Scenedesmus" = "#E0115F",
+  "Monoraphidium"="#FDC086",
+  "Selenastrum"= "#386CB0"),
+   guide=guide_legend(keywidth=0.5,
+                              keyheight=0.5,
+                              order=1
+                             )) +
+  #new_scale_fill() +
+  new_scale_color()
+
+c2 <- r +  geom_tippoint(aes(color = Effect),
+                         size = 1) +
+  scale_color_manual(
+    name = "Growth Outcome",
+    values = c("Negative" = "#D2042D",
+               "Not Significant" = "gray", 
+               "Positive" = "springgreen"),
+   na.translate = F,
+   guide=guide_legend(keywidth=0.5,
+                              keyheight=0.5,
+                              order=2
+                             )) 
+  
+  
+
+r2 <- r + 
+  geom_fruit(aes(y = label, fill = Effect),
+             geom = geom_tile,
+             width=0.05,
+             pwidth = 0.1,
+             color="white",
+             inherit.aes = F,
+             offset = 0.1
+  ) +
+  scale_fill_manual(
+    name = "Growth Outcome",
+    values = c("Negative" = "#D2042D",
+               "Not Significant" = "gray", 
+               "Positive" = "springgreen"),
+   na.translate = F,
+   guide=guide_legend(keywidth=0.5,
+                              keyheight=0.5,
+                              order=2
+                             ))
 png(filename = "isolate_tree_effects.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 12,
+    height = 12)
+r2
+dev.off()
+
+png(filename = "isolate_tree_effects_w_colors.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 12,
+    height = 12)
+r2
+dev.off()
+
+png(filename = "isolate_tree_effects_alt.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 12,
+    height = 12)
+c2
+dev.off()
+
+png(filename = "isolate_tree_effects_gamma.png",
     res = 450,
     type = "cairo",
     units = "in",
