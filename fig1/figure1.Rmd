@@ -252,6 +252,15 @@ all_hits <- GRBC_data |>
   inner_join(agg_genus_data, by = c("asv", "host_species")) |>
   summarise(rep_asvs = sum(rel_abund)/n_distinct(Group)) 
 
+#Look at shared ASVs among multiple host phycospheres
+all_hits <- GRBC_data |>
+  select(asv, host_species) |>
+  distinct(asv, host_species) |>
+  inner_join(agg_genus_data, by = c("asv", "host_species")) |>
+  group_by(asv) |>
+  summarise(host_presence = n_distinct(host_species))
+write.csv(all_hits, "asv_host_prevalence.csv")
+
 #Look at % of asvs that are present in more than three host phycospheres at D3 that are >1% abundant
 D3_shared_asvs <- D3_data |>
   filter(rel_abund > 0.01) |>

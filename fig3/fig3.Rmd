@@ -24,7 +24,6 @@ colors <- read.csv("../csv_files/colors.csv")|>
 
 tax <- read.csv("../csv_files/collection_tax_data.csv") |>
   select(asv, Isolate, mixed, Phylum:Genus)
-tax_full <- read.csv("../csv_files/collection_tax_data.csv")
 
 extract_dfs <- function(x, full_results) { 
   tryCatch(
@@ -490,24 +489,36 @@ orig_host_data <- renamed_data |>
   pivot_wider(names_from = c(host_status), values_from = c(mean_log_auc_norm, se_log_auc_norm,
                                                            mean_log_norm_gr, se_log_norm_gr,
                                                            mean_log_norm_cc, se_log_norm_cc)) |>
-  select(Isolate, orig_host, mean_log_auc_norm_Original:se_log_norm_cc_Original)
-  #rename("recent_effect" = Effect)
+  select(Isolate, orig_host, mean_log_auc_norm_Original:se_log_norm_cc_Original, grEffect, ccEffect, Effect)
 
-orig_host_comp <- filter(tax_full, Isolate %in% orig_host_data$Isolate) |>
-  select(Isolate, host_species, grEffect, ccEffect, Effect, mixed, seq_type) |>
-  left_join(orig_host_data) 
-  
-  
+init_screen_comp <- read_csv("../csv_files/collection_tax_data.csv") |>
+  select(Isolate,asv, host_species, log_auc_norm, Effect, ccEffect, grEffect) |>
+  rename("init_effect" = Effect,
+         "init_gr" = grEffect,
+         "init_cc" = ccEffect) |>
+  inner_join(orig_host_data) |>
+   ungroup()
+
+asv_host_prevalence <- read_csv("../fig1/asv_host_prevalence.csv") |>
+  select(- ...1)
+
 comparison_data <- renamed_data |>
   filter(host_status == "Transplant") |>
   pivot_wider(names_from = c(host_status), values_from = c(mean_log_auc_norm, se_log_auc_norm,
                                                            mean_log_norm_gr, se_log_norm_gr,
                                                            mean_log_norm_cc, se_log_norm_cc)) |>
   left_join(orig_host_data, by = c('Isolate','orig_host')) |>
-  select(Isolate, new_host, orig_host, Effect,grEffect,ccEffect, asv:se_log_norm_cc_Original)
+  select(Isolate, new_host, orig_host, Effect,grEffect,ccEffect, asv:se_log_norm_cc_Original) |>
+  left_join(asv_host_prevalence) |>
+  mutate(host_presence = case_when(is.na(host_presence) ~ 0,
+                                   T ~ host_presence))
 
-lm_auc <- lm(mean_log_auc_norm_Transplant ~ mean_log_auc_norm_Original:orig_host, data = comparison_data)
+lm_auc <- lm(mean_log_auc_norm_Transplant ~ mean_log_auc_norm_Original, data = comparison_data)
 summary(lm_auc)
+lm_auc_host <- lm(mean_log_auc_norm_Transplant ~ mean_log_auc_norm_Original:orig_host, data = comparison_data)
+summary(lm_auc_host)
+lm_hp <- lm(mean_log_auc_norm_Transplant ~ mean_log_auc_norm_Original:host_presence, data = comparison_data)
+summary(lm_hp)
 lm_gr <- lm(mean_log_norm_gr_Transplant ~ mean_log_norm_gr_Original:orig_host, data = comparison_data)
 summary(lm_gr)
 lm_cc <- lm(mean_log_norm_cc_Transplant ~ mean_log_norm_cc_Original:orig_host, data = comparison_data)
@@ -621,6 +632,38 @@ scatterplot_gr <- ggplot(comparison_data,
         legend.box = "vertical") +
   labs(title = "Growth Rate Outcomes of Original vs Transplanted Host Algae")
 
+init_screen_scplot <- ggplot(init_screen_comp,
+                        aes( x =log_auc_norm, 
+                         y = mean_log_auc_norm_Original, color = Effect, shape = init_effect)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("Negative" = "#D2042D",
+                                "Not Significant" = "gray",
+                                "Positive" = "#008E00"
+                                ), 
+                     "Growth Outcome, Repeat Screen") +
+  scale_shape_manual(values = c("Negative" = 25,
+                                  "Not Significant" = 21,
+                                  "Positive" = 24),
+                       name = "Growth Outcome, Initial Screen") +
+  geom_hline(yintercept = 0, color = "grey", linetype = "longdash") +
+  geom_vline(xintercept = 0, color = "grey", linetype = "longdash") +
+  xlab("Log Norm AUC Inital") +
+  ylab("Log Norm AUC Repeat") +
+  # geom_errorbar(aes(ymin = mean_log_norm_gr_Transplant - se_log_norm_gr_Transplant ,
+  #                   ymax = mean_log_norm_gr_Transplant + se_log_norm_gr_Transplant)) +
+  # geom_errorbarh(aes(xmin = mean_log_norm_gr_Original - se_log_norm_gr_Original,
+  #                    xmax = mean_log_norm_gr_Original + se_log_norm_gr_Original)) +
+  theme_pubclean() +
+  theme(legend.position = "bottom",
+        legend.justification = "center",
+        legend.box = "vertical") +
+  labs(title = "Growth Rate Outcomes of Initial vs Repeat Screen")
+
+corr <- cor_test(data = init_screen_comp, select(where(~select(mean_log_auc_norm_Original + log_auc_norm))), method = "pearson")
+init_screen_comp |>
+ select(mean_log_auc_norm_Original, log_auc_norm) |>
+  cor_test()
+  
 png(filename = "cross_host_outcomes.png",
     res = 450,
     type = "cairo",

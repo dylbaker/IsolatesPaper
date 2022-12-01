@@ -66,7 +66,7 @@ tax_effects <- inner_join(isolate_tax,isolate_effects, by = c("Group" = "Isolate
   mutate(Group = str_replace(Group, "point", "p"))
   as_tibble()
 
-tree <- read.tree("../mothur_outputs/GRBC_seqs/isolates.asv.nwk") 
+# tree <- read.tree("../mothur_outputs/GRBC_seqs/isolates.asv.nwk") 
 ruben_tree <- read.tree("../mothur_outputs/GRBC_seqs/isolates.asv.ruben.nwk")
 
 
@@ -80,59 +80,59 @@ ruben_tree <- read.tree("../mothur_outputs/GRBC_seqs/isolates.asv.ruben.nwk")
 # tree <- as.phylo(tidy_tree)
 
 
-
-p <- ggtree(tree, layout = "circular") %<+% tax_effects   +
-  geom_fruit(aes(y = Group, fill = host_species),
-             geom = geom_tile,
-             width=0.05,
-             pwidth = 0.1,
-             color="white",
-             inherit.aes = F,
-             offset = .4
-  ) +
-  scale_fill_manual(
-    name = "Host Algae",
-    values = c("Chlorella"  = "#7FC97F",
-  "Coelastrum" = "#BEAED4",
-  "Scenedesmus" = "#E0115F",
-  "Monoraphidium"="#FDC086",
-  "Selenastrum"= "#386CB0"),
-   na.translate = F,
-   guide=guide_legend(keywidth=0.5,
-                              keyheight=0.5,
-                              order=1
-                             )) +
-  geom_tiplab(#aes(color = order),
-              align=TRUE,
-              size = 2,
-                   linesize=0.3,
-                   show.legend=FALSE,
-              geom = "text",
-              offset = .05
-              ) +
-  new_scale_fill()
-  
-  
-
-p2 <- p + 
-  geom_fruit(aes(y = label, fill = Effect),
-             geom = geom_tile,
-             width=0.05,
-             pwidth = 0.1,
-             color="white",
-             inherit.aes = F,
-             offset = 0.1
-  ) +
-  scale_fill_manual(
-    name = "Growth Outcome",
-    values = c("Negative" = "#D2042D",
-               "Not Significant" = "gray", 
-               "Positive" = "springgreen"),
-   na.translate = F,
-   guide=guide_legend(keywidth=0.5,
-                              keyheight=0.5,
-                              order=2
-                             ))
+# 
+# p <- ggtree(tree, layout = "circular") %<+% tax_effects   +
+#   geom_fruit(aes(y = Group, fill = host_species),
+#              geom = geom_tile,
+#              width=0.05,
+#              pwidth = 0.1,
+#              color="white",
+#              inherit.aes = F,
+#              offset = .4
+#   ) +
+#   scale_fill_manual(
+#     name = "Host Algae",
+#     values = c("Chlorella"  = "#7FC97F",
+#   "Coelastrum" = "#BEAED4",
+#   "Scenedesmus" = "#E0115F",
+#   "Monoraphidium"="#FDC086",
+#   "Selenastrum"= "#386CB0"),
+#    na.translate = F,
+#    guide=guide_legend(keywidth=0.5,
+#                               keyheight=0.5,
+#                               order=1
+#                              )) +
+#   geom_tiplab(#aes(color = order),
+#               align=TRUE,
+#               size = 2,
+#                    linesize=0.3,
+#                    show.legend=FALSE,
+#               geom = "text",
+#               offset = .05
+#               ) +
+#   new_scale_fill()
+#   
+#   
+# 
+# p2 <- p + 
+#   geom_fruit(aes(y = label, fill = Effect),
+#              geom = geom_tile,
+#              width=0.05,
+#              pwidth = 0.1,
+#              color="white",
+#              inherit.aes = F,
+#              offset = 0.1
+#   ) +
+#   scale_fill_manual(
+#     name = "Growth Outcome",
+#     values = c("Negative" = "#D2042D",
+#                "Not Significant" = "gray", 
+#                "Positive" = "springgreen"),
+#    na.translate = F,
+#    guide=guide_legend(keywidth=0.5,
+#                               keyheight=0.5,
+#                               order=2
+#                              ))
 
 r <- ggtree(ruben_tree, layout = "circular", ladderize = T) %<+% tax_effects   +
   geom_fruit(aes(y = Group, fill = order),
@@ -185,42 +185,42 @@ c2 <- r +  geom_tippoint(aes(color = Effect),
   
   
 
-r2 <- r + 
-  geom_fruit(aes(y = label, fill = Effect),
-             geom = geom_tile,
-             width=0.05,
-             pwidth = 0.1,
-             color="white",
-             inherit.aes = F,
-             offset = 0.1
-  ) +
-  scale_fill_manual(
-    name = "Growth Outcome",
-    values = c("Negative" = "#D2042D",
-               "Not Significant" = "gray", 
-               "Positive" = "springgreen"),
-   na.translate = F,
-   guide=guide_legend(keywidth=0.5,
-                              keyheight=0.5,
-                              order=2
-                             ))
-png(filename = "isolate_tree_effects.png",
-    res = 450,
-    type = "cairo",
-    units = "in",
-    width = 12,
-    height = 12)
-r2
-dev.off()
-
-png(filename = "isolate_tree_effects_w_colors.png",
-    res = 450,
-    type = "cairo",
-    units = "in",
-    width = 12,
-    height = 12)
-r2
-dev.off()
+# r2 <- r + 
+#   geom_fruit(aes(y = label, fill = Effect),
+#              geom = geom_tile,
+#              width=0.05,
+#              pwidth = 0.1,
+#              color="white",
+#              inherit.aes = F,
+#              offset = 0.1
+#   ) +
+#   scale_fill_manual(
+#     name = "Growth Outcome",
+#     values = c("Negative" = "#D2042D",
+#                "Not Significant" = "gray", 
+#                "Positive" = "springgreen"),
+#    na.translate = F,
+#    guide=guide_legend(keywidth=0.5,
+#                               keyheight=0.5,
+#                               order=2
+#                              ))
+# png(filename = "isolate_tree_effects.png",
+#     res = 450,
+#     type = "cairo",
+#     units = "in",
+#     width = 12,
+#     height = 12)
+# r2
+# dev.off()
+# 
+# png(filename = "isolate_tree_effects_w_colors.png",
+#     res = 450,
+#     type = "cairo",
+#     units = "in",
+#     width = 12,
+#     height = 12)
+# r2
+# dev.off()
 
 png(filename = "isolate_tree_effects_alt.png",
     res = 450,
@@ -231,12 +231,12 @@ png(filename = "isolate_tree_effects_alt.png",
 c2
 dev.off()
 
-png(filename = "isolate_tree_effects_gamma.png",
-    res = 450,
-    type = "cairo",
-    units = "in",
-    width = 12,
-    height = 12)
-p2
-dev.off()
+# png(filename = "isolate_tree_effects_gamma.png",
+#     res = 450,
+#     type = "cairo",
+#     units = "in",
+#     width = 12,
+#     height = 12)
+# p2
+# dev.off()
 ```
