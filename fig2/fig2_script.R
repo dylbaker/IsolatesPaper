@@ -173,8 +173,7 @@ impact_barplot_sep <-  summary_data |>
   scale_fill_manual(values = c("NS" = "gray", "Positive" = "springgreen", "Negative" = "#D2042D"), "Growth Outcome") +
   theme_pubclean() +
   theme(legend.position = "bottom",
-        legend.justification = "center") +
-  labs(title = "Growth Outcomes of Algal Hosts when Co-cultured with Associated Bacteria")
+        legend.justification = "center")
 
 impact_barplot_sep_noauc <-  summary_data |>
   filter(metric %in% c("Growth Rate", "Carrying Capacity"), number > 0) |>
@@ -188,8 +187,7 @@ impact_barplot_sep_noauc <-  summary_data |>
   scale_fill_manual(values = c("NS" = "gray", "Positive" = "springgreen", "Negative" = "#D2042D"), "Growth Outcome") +
   theme_pubclean() +
   theme(legend.position = "bottom",
-        legend.justification = "center") +
-  labs(title = "Growth Outcomes of Algal Hosts when Co-cultured with Associated Bacteria")
+        legend.justification = "center")
 
 png(filename = "./fig2/isolate_impact_barplot_sep.png",
     res = 450,
@@ -218,8 +216,23 @@ png(filename = "./fig2/isolate_impact_barplot.png",
 impact_barplot
 dev.off()
 
-
-
+fig2 <- impact_barplot_sep_noauc + effects_boxplot_noauc  + plot_annotation(
+  tag_levels = "A"
+) + plot_layout(
+  guides = 'collect'  
+) & theme(
+          legend.position = "bottom",
+          legend.justification = "center",
+          
+)
+png(filename = "./fig2/fig2.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 12,
+    height = 12)
+fig2
+dev.off()
 ##### Supplemental Figure #####
 #### Faceted Plots ####
 grPlot_facet <- stats_pure_meanCoefs |>
