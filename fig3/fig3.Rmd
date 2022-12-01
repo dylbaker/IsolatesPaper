@@ -492,7 +492,7 @@ orig_host_data <- renamed_data |>
   select(Isolate, orig_host, mean_log_auc_norm_Original:se_log_norm_cc_Original, grEffect, ccEffect, Effect)
 
 init_screen_comp <- read_csv("../csv_files/collection_tax_data.csv") |>
-  select(Isolate,asv, host_species, log_auc_norm, Effect, ccEffect, grEffect) |>
+  select(Isolate,asv, host_species, log_auc_norm,se_lan, Effect, ccEffect, grEffect) |>
   rename("init_effect" = Effect,
          "init_gr" = grEffect,
          "init_cc" = ccEffect) |>
@@ -508,7 +508,7 @@ comparison_data <- renamed_data |>
                                                            mean_log_norm_gr, se_log_norm_gr,
                                                            mean_log_norm_cc, se_log_norm_cc)) |>
   left_join(orig_host_data, by = c('Isolate','orig_host')) |>
-  select(Isolate, new_host, orig_host, Effect,grEffect,ccEffect, asv:se_log_norm_cc_Original) |>
+  select(Isolate, new_host, orig_host, Effect.x,grEffect,ccEffect, asv:se_log_norm_cc_Original) |>
   left_join(asv_host_prevalence) |>
   mutate(host_presence = case_when(is.na(host_presence) ~ 0,
                                    T ~ host_presence))
@@ -649,17 +649,17 @@ init_screen_scplot <- ggplot(init_screen_comp,
   geom_vline(xintercept = 0, color = "grey", linetype = "longdash") +
   xlab("Log Norm AUC Inital") +
   ylab("Log Norm AUC Repeat") +
-  # geom_errorbar(aes(ymin = mean_log_norm_gr_Transplant - se_log_norm_gr_Transplant ,
-  #                   ymax = mean_log_norm_gr_Transplant + se_log_norm_gr_Transplant)) +
-  # geom_errorbarh(aes(xmin = mean_log_norm_gr_Original - se_log_norm_gr_Original,
-  #                    xmax = mean_log_norm_gr_Original + se_log_norm_gr_Original)) +
+  geom_errorbar(aes(ymin = mean_log_auc_norm_Original - se_log_auc_norm_Original,
+                     ymax = mean_log_auc_norm_Original + se_log_auc_norm_Original)) +
+  geom_errorbarh(aes(xmin = log_auc_norm - se_lan,
+                     xmax = log_auc_norm + se_lan)) +
   theme_pubclean() +
   theme(legend.position = "bottom",
         legend.justification = "center",
         legend.box = "vertical") +
   labs(title = "Growth Rate Outcomes of Initial vs Repeat Screen")
 
-corr <- cor_test(data = init_screen_comp, select(where(~select(mean_log_auc_norm_Original + log_auc_norm))), method = "pearson")
+
 init_screen_comp |>
  select(mean_log_auc_norm_Original, log_auc_norm) |>
   cor_test()
@@ -691,4 +691,13 @@ png(filename = "cross_host_outcomes_gr.png",
 scatterplot_gr
 dev.off()
 
+  
+png(filename = "init_v_repeat.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 8,
+    height = 8)
+init_screen_scplot
+dev.off()
 ```

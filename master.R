@@ -279,20 +279,19 @@ tTestData <- bind_rows(tTestData_split)
 #### AUC Normalization ####
 AC_auc_mean <- ctrl_aucData |>
   group_by(host_species,plate_no) |>
-  mutate(acAuc_mean = mean(auc),
-         acAuc_se = sd(auc)/sqrt(n())) |>
+  mutate(acAuc_mean = mean(auc)) |>
   select(host_species, plate_no, acAuc_mean, acAuc_se) |>
   distinct()
 
 auc_data_norm <- sample_aucData |>
   group_by(Isolate, host_species, plate_no) |>
-  summarise(auc_mean = mean(auc),
-            auc_se = sd(auc)/sqrt(n())) |>
   left_join(AC_auc_mean)|>
-  mutate(auc_norm = auc_mean/acAuc_mean,
-         log_auc_norm = log(auc_norm)) |>
-  left_join(tTestData) |>
-  filter(!is.na(Effect))
+  mutate(auc_norm = auc/acAuc_mean,
+         log_auc_norm = log(auc_norm),
+         se_lan = sd(log_auc_norm)/sqrt(n())) |>
+  distinct(Isolate, .keep_all = T) |>
+  filter(!is.na(se_lan)) |>
+  left_join(tTestData) 
 
 coefList <- foreach(i = 1:length(data_split), .packages = "tidyverse") %dopar%{
   tryCatch({
@@ -443,16 +442,11 @@ stats_meanCoefs <- stats_normCoefs |>
 list.file <- "./mothur_outputs/all_seqs/final.merge.asv.list"
 constax.file <- "./mothur_outputs/all_seqs/final.merge.asv.ASV.cons.taxonomy"
 shared.file <- "./mothur_outputs/all_seqs/final.merge.asv.shared"
-# Tree using representative sequences from each asv
-tree.file <- "./mothur_outputs/GRBC_seqs/final.an.rep.asvRename.phylip.tre"
-# Tree that uses isolate names, result of shared.tree() command in mothur --> looks very weird
-# tree.file <- "./raw_data/mothur_outputs/final.an.jclass.unique.tre"
 
 # Read mothur outputs into phyloseq/R
 mo.data <- import_mothur(mothur_list_file = list.file,
                          mothur_constaxonomy_file = constax.file,
                          mothur_shared_file = shared.file)
-tree.data <- read_tree(treefile = tree.file)
 
 # Convert stats data into phyloseq sample data (syntax of Isolate names changed to match mothur sample name syntax)
 duplicate_stats <- split(stats_meanCoefs, duplicated(stats_meanCoefs$Isolate) | duplicated(stats_meanCoefs$Isolate, fromLast = TRUE), 
