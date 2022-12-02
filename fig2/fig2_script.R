@@ -18,13 +18,19 @@ stats_meanCoefs <- read.csv("./csv_files/collection_tax_data_pureOnly.csv") |>
   mutate(asv = str_replace(string = asv, pattern = "0+", replacement = ''),
          order = factor(parse_number(asv)),
          isolation_day = ifelse(str_detect(Isolate, "D31|DF|S"), "D31", "D3"),
-         mean_logNormGR = log(mean_normGR)) |>
+         mean_logNormGR = log(mean_normGR),
+         host_species = case_when(host_species == "chlorella" ~ "C. sorokiniana",
+                                         host_species == "coelastrum" ~ "C. microporum",
+                                         host_species == "scenedesmus" ~ "S. acuminatus",
+                                         host_species == "monoraphidium" ~ "M. minutum",
+                                         host_species == "selenastrum" ~ "S. capricornutum",
+                                         T ~ host_species
+         )) |>
   arrange(order, desc = TRUE) 
 
 stats_pure_meanCoefs <- filter(stats_meanCoefs, mixed == F)
 
 long_data <- stats_meanCoefs |>
-  mutate(host_species = str_to_title(host_species)) |>
   group_by(host_species, isolation_day) |>
   pivot_longer(c(mean_logNormGR, mean_logNormCC, log_auc_norm), names_to = "growth_metric", values_to = "value") |>
   select(Isolate, host_species, isolation_day, growth_metric, value) |>
@@ -55,21 +61,30 @@ tukey_hsd_noauc <- long_data |>
   add_xy_position(x = "isolation_day", scales = "free_y") 
 
 effects_boxplot <- stats_meanCoefs |>
-  mutate(host_species = str_to_title(host_species)) |>
   group_by(host_species, isolation_day) |>
-  pivot_longer(c(mean_logNormGR, mean_logNormCC, log_auc_norm), names_to = "growth_metric", values_to = "value") |>
+  pivot_longer(
+    c(mean_logNormGR, mean_logNormCC, log_auc_norm),
+    names_to = "growth_metric",
+    values_to = "value"
+  ) |>
   select(Isolate, host_species, isolation_day, growth_metric, value) |>
-  mutate(growth_metric = case_when(growth_metric == "log_auc_norm" ~ "Area Under Curve",
-                                   growth_metric == "mean_logNormCC" ~ "Carrying Capacity",
-                                   growth_metric == "mean_logNormGR" ~ "Growth Rate")) |>
+  mutate(
+    growth_metric = case_when(
+      growth_metric == "log_auc_norm" ~ "Area Under Curve",
+      growth_metric == "mean_logNormCC" ~ "Carrying Capacity",
+      growth_metric == "mean_logNormGR" ~ "Growth Rate"
+    )
+  ) |>
   ggplot(aes(x = isolation_day, y = value, color = isolation_day)) +
   geom_boxplot(show.legend = F) +
   #ylim(-1, 1) +
-  coord_cartesian(ylim = c(-1,1)) + 
+  coord_cartesian(ylim = c(-1, 1)) +
   facet_grid(host_species ~ growth_metric) +
   ylab("Log Normalized Value") +
   xlab("Isolation Day") +
-  geom_hline(yintercept = 0, color = "grey", linetype = "longdash") +
+  geom_hline(yintercept = 0,
+             color = "grey",
+             linetype = "longdash") +
   stat_pvalue_manual(tukey_hsd,
                      label = "p.adj.signif",
                      tip.length = 0,
@@ -78,7 +93,6 @@ effects_boxplot <- stats_meanCoefs |>
   theme_pubclean()
 
 effects_boxplot_noauc <- stats_meanCoefs |>
-  mutate(host_species = str_to_title(host_species)) |>
   group_by(host_species, isolation_day) |>
   pivot_longer(c(mean_logNormGR, mean_logNormCC, log_auc_norm), names_to = "growth_metric", values_to = "value") |>
   select(Isolate, host_species, isolation_day, growth_metric, value) |>
@@ -99,7 +113,8 @@ effects_boxplot_noauc <- stats_meanCoefs |>
                      tip.length = 0,
                      hide.ns = T) +
   labs(caption = get_pwc_label(tukey_hsd_noauc)) +
-  theme_pubclean()
+  theme_pubclean() +
+  theme(strip.text.y = element_text(face = "italic"))
 
 png(filename = "./fig2/effects_barplot.png",
     res = 450,
@@ -137,7 +152,6 @@ summary_data <- stats_meanCoefs |>
             n_0 = sum(c(n_0_gr,n_0_cc)),
             total = n()
             ) |>
-  mutate(host_species = str_to_title(host_species)) |>
   pivot_longer(!host_species &! isolation_day & !total, names_to = "growth_outcome", values_to = "percent") |>
   mutate(number = round(percent * total),
          label = paste("n =", number),
@@ -187,7 +201,8 @@ impact_barplot_sep_noauc <-  summary_data |>
   scale_fill_manual(values = c("NS" = "gray", "Positive" = "springgreen", "Negative" = "#D2042D"), "Growth Outcome") +
   theme_pubclean() +
   theme(legend.position = "bottom",
-        legend.justification = "center")
+        legend.justification = "center",
+        strip.text.y = element_text(face = "italic"))
 
 png(filename = "./fig2/isolate_impact_barplot_sep.png",
     res = 450,
