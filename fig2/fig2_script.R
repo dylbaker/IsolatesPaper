@@ -230,7 +230,7 @@ png(filename = "./fig2/fig2.png",
     type = "cairo",
     units = "in",
     width = 12,
-    height = 12)
+    height = 8)
 fig2
 dev.off()
 ##### Supplemental Figure #####
