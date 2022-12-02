@@ -497,10 +497,47 @@ init_screen_comp <- read_csv("../csv_files/collection_tax_data.csv") |>
          "init_gr" = grEffect,
          "init_cc" = ccEffect) |>
   inner_join(orig_host_data) |>
+  mutate(grEffect = case_when(grEffect == "Neutral" ~ "Not Significant",
+                              T ~ grEffect),
+         ccEffect = case_when(ccEffect == "Neutral" ~ "Not Significant",
+                              T ~ ccEffect)) |>
    ungroup()
+
+init_v_repeat_stats <- init_screen_comp |>
+  summarise(
+    auc_change = sum(init_effect == Effect) / n(),
+    gr_change = sum(init_gr == grEffect) / n(),
+    cc_change = sum(init_cc == ccEffect) / n(),
+    pos_auc = sum(init_effect == "Positive" &
+                    Effect == "Positive") / sum(init_effect == "Positive"),
+    ns_auc = sum(init_effect == "Not Significant" &
+                   Effect == "Not Significant") / sum(init_effect == "Not Significant"),
+    neg_auc = sum(init_effect == "Negative" &
+                    Effect == "Negative") / sum(init_effect == "Negative"),
+    pos_gr = sum(init_gr == "Positive" &
+                   grEffect == "Positive") / sum(init_gr == "Positive"),
+    ns_gr = sum(init_gr == "Not Significant" &
+                  grEffect == "Not Significant") / sum(init_gr == "Not Significant"),
+    neg_gr = sum(init_gr == "Negative" &
+                   grEffect == "Negative") / sum(init_gr == "Negative"),
+    pos_cc = sum(init_cc == "Positive" &
+                   ccEffect == "Positive") / sum(init_cc == "Positive"),
+    ns_cc = sum(init_cc == "Not Significant" &
+                  ccEffect == "Not Significant") / sum(init_cc == "Not Significant"),
+    neg_cc = sum(init_cc == "Negative" &
+                   ccEffect == "Negative") / sum(init_cc == "Negative")
+  ) |>
+  pivot_longer(cols = everything(), values_to = "Percent Conserved")
 
 asv_host_prevalence <- read_csv("../fig1/asv_host_prevalence.csv") |>
   select(- ...1)
+
+orig_host_data <- renamed_data |> 
+  filter(host_status == "Original") |>
+  pivot_wider(names_from = c(host_status), values_from = c(mean_log_auc_norm, se_log_auc_norm,
+                                                           mean_log_norm_gr, se_log_norm_gr,
+                                                           mean_log_norm_cc, se_log_norm_cc)) |>
+  select(Isolate, orig_host, mean_log_auc_norm_Original:se_log_norm_cc_Original)
 
 comparison_data <- renamed_data |>
   filter(host_status == "Transplant") |>
@@ -508,7 +545,7 @@ comparison_data <- renamed_data |>
                                                            mean_log_norm_gr, se_log_norm_gr,
                                                            mean_log_norm_cc, se_log_norm_cc)) |>
   left_join(orig_host_data, by = c('Isolate','orig_host')) |>
-  select(Isolate, new_host, orig_host, Effect.x,grEffect,ccEffect, asv:se_log_norm_cc_Original) |>
+  select(Isolate, new_host, orig_host, Effect,grEffect,ccEffect, asv:se_log_norm_cc_Original) |>
   left_join(asv_host_prevalence) |>
   mutate(host_presence = case_when(is.na(host_presence) ~ 0,
                                    T ~ host_presence))
@@ -532,37 +569,67 @@ summary(lm_cc)
 
 ```{r Plots, }
 #Scatterplot ordination
-scatterplot <- ggplot(comparison_data,
-                        aes( x = mean_log_auc_norm_Original, 
-                         y = mean_log_auc_norm_Transplant, color = Effect, shape = new_host)) +
+scatterplot <- ggplot(
+  comparison_data,
+  aes(
+    x = mean_log_auc_norm_Original,
+    y = mean_log_auc_norm_Transplant,
+    color = Effect,
+    shape = new_host
+  )
+) +
   geom_point(size = 3) +
-  scale_color_manual(values = c("Not Significant" = "gray",
-                                "Positive" = "#096C72", 
-                                "Negative" = "#D2042D"), 
-                     "Growth Outcome on Transplant Host") +
-  scale_shape_manual(labels = c("CS" ="Chorella",
-                                "CM" = "Coelastrum",
-                               "SA"= "Scenedesmus",
-                               "MM" = "Monoraphidium",
-                                "SC" = "Selenastrum"),
-                       values = c("CS" = 0,
-                                  "CM" = 1,
-                                  "SA" = 2,
-                                  "MM" = 5,
-                                  "SC" = 6),
-                       name = "Transplant Host") +
-  geom_hline(yintercept = 0, color = "grey", linetype = "longdash") +
-  geom_vline(xintercept = 0, color = "grey", linetype = "longdash") +
+  scale_color_manual(
+    values = c(
+      "Not Significant" = "gray",
+      "Positive" = "#096C72",
+      "Negative" = "#D2042D"
+    ),
+    "Growth Outcome on Transplant Host"
+  ) +
+  scale_shape_manual(
+    labels = c(
+      "CS" = expression(italic("C. sorokiniana")),
+      "CM" = expression(italic("C. microporum")),
+      "SA" = expression(italic("S. acuminatus")),
+      "MM" = expression(italic("M. minutum")),
+      "SC" = expression(italic("S. capricornutum"))
+    ),
+    values = c(
+      "CS" = 0,
+      "CM" = 1,
+      "SA" = 2,
+      "MM" = 5,
+      "SC" = 6
+    ),
+    name = "Transplant Host"
+  ) +
+  geom_hline(yintercept = 0,
+             color = "grey",
+             linetype = "longdash") +
+  geom_vline(xintercept = 0,
+             color = "grey",
+             linetype = "longdash") +
   ylab("Log Norm AUC Transplant Host") +
   xlab("Log Norm AUC Original Host") +
-  geom_errorbar(aes(ymin = mean_log_auc_norm_Transplant - se_log_auc_norm_Transplant ,
-                    ymax = mean_log_auc_norm_Transplant + se_log_auc_norm_Transplant)) +
-  geom_errorbarh(aes(xmin = mean_log_auc_norm_Original - se_log_auc_norm_Original,
-                     xmax = mean_log_auc_norm_Original + se_log_auc_norm_Original)) +
+  geom_errorbar(
+    aes(
+      ymin = mean_log_auc_norm_Transplant - se_log_auc_norm_Transplant ,
+      ymax = mean_log_auc_norm_Transplant + se_log_auc_norm_Transplant
+    )
+  ) +
+  geom_errorbarh(
+    aes(
+      xmin = mean_log_auc_norm_Original - se_log_auc_norm_Original,
+      xmax = mean_log_auc_norm_Original + se_log_auc_norm_Original
+    )
+  ) +
   theme_pubclean() +
-  theme(legend.position = "bottom",
-        legend.justification = "center",
-        legend.box = "vertical") +
+  theme(
+    legend.position = "bottom",
+    legend.justification = "center",
+    legend.box = "vertical"
+  ) +
   labs(title = "Growth Outcomes of Original vs Transplanted Host Algae")
 
 scatterplot_cc <- ggplot(comparison_data,
