@@ -106,7 +106,7 @@ D3_data <- inner_join(Phycosphere_asv_D3, Phycosphere_tax) |> #Groups by asv aut
          genus=str_replace_all(string=genus,
                pattern="Allorhizobium-Neorhizobium-Pararhizobium-Rhizobium", replacement="A-N-P-R"))
 
-D31_data <- inner_join(Phycosphere_asv_D31, Phycosphere_tax) |> #Groups by otu automatically
+D31_data <- inner_join(Phycosphere_asv_D31, Phycosphere_tax) |> #Groups by asv automatically
   mutate(time = "D31",
          genus=str_replace_all(string=genus,
                pattern="Allorhizobium-Neorhizobium-Pararhizobium-Rhizobium", replacement="A-N-P-R")) 
@@ -151,7 +151,7 @@ agg_genus_data_D3_color <- D3_data |>
   mutate(color = if_else(condition = is.na(color), true = "black", false = color),
          subset = ifelse(rel_abund > 0.01, "Abundant","Rare (<1% of Total Reads Within a Host Phycosphere)"),
          significant = ifelse(color == "black", "", "*"),
-         asv = str_replace(string = asv, pattern = "0+", replacement = ''),
+         asv = str_replace(string = asv, pattern = "ASV0+", replacement = ''),
          time = "D3",
          host_species = factor(host_species, 
                                levels = c("Chlorella", "Coelastrum", "Scenedesmus", "Monoraphidium", 
@@ -164,7 +164,7 @@ agg_genus_data_D31_color <- D31_data |>
   left_join(Phycosphere_GRBC_D31, by = c("asv", "host_species")) |>
   mutate(color = if_else(condition = is.na(color), true = "black", false = color),
          significant = ifelse(color == "black", "", "*"),
-         asv = str_replace(string = asv, pattern = "0+", replacement = ''),
+         asv = str_replace(string = asv, pattern = "ASV0+", replacement = ''),
          time = "D31",
          host_species = factor(host_species, 
                                levels = c("Chlorella", "Coelastrum", "Scenedesmus", "Monoraphidium", 
@@ -172,42 +172,100 @@ agg_genus_data_D31_color <- D31_data |>
   ungroup()
 
 
+
 D3_plots_combined <- agg_genus_data_D3_color |>
-  ggplot(aes(x = reorder_within(asv, -rel_abund, fun = sum, within = subset), y = rel_abund, fill = host_species)) +
+  ggplot(aes(
+    x = reorder_within(asv,-rel_abund, fun = sum, within = subset),
+    y = rel_abund,
+    fill = host_species
+  )) +
   geom_col() +
   scale_x_reordered() +
-  facet_wrap(~subset, scales = "free") +
+  facet_wrap( ~ subset, scales = "free") +
   theme_pubclean() +
-  scale_fill_manual(values = c("Chlorella"  = "#7FC97F",
-  "Coelastrum" = "#BEAED4",
-  "Scenedesmus" = "#E0115F",
-  "Monoraphidium"="#FDC086",
-  "Selenastrum"= "#386CB0"), "Host Algae")  +
-  geom_text(aes(label = significant), 
-              position = position_stack(vjust = 0.5), vjust = .8, size = 20 / .pt) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
-    labs( y = "Relative Abundance (ASV)", x = "", fill = '',
-          title = "Rank Abundance Curves of Green Alga Phycospheres, 3 Days Post Introduction to Pond Water")
+  scale_fill_manual(
+    labels = c(
+      "Chlorella" = expression(italic("C. sorokiniana")),
+      "Coelastrum" = expression(italic("C. microporum")),
+      "Scenedesmus" = expression(italic("S. acuminatus")),
+      "Monoraphidium" = expression(italic("M. minutum")),
+      "Selenastrum" = expression(italic("S. capricornutum"))
+    ),
+    values = c(
+      "Chlorella"  = "#7FC97F",
+      "Coelastrum" = "#BEAED4",
+      "Scenedesmus" = "#E0115F",
+      "Monoraphidium" = "#FDC086",
+      "Selenastrum" = "#386CB0"
+    ),
+    "Host Algae"
+  )  +
+  geom_text(
+    aes(label = significant),
+    position = position_stack(vjust = 0.5),
+    vjust = .8,
+    size = 20 / .pt
+  ) +
+  theme(axis.text.x = element_text(
+    angle = 90,
+    vjust = 0.5,
+    hjust = 1
+  )) +
+  labs(y = "Relative Abundance (ASV)",
+       x = "",
+       fill = '',
+       title = "Rank Abundance Curves of Green Alga Phycospheres, 3 Days Post Introduction to Pond Water")
 
 
-D31_plots_combined<- agg_genus_data_D31_color |> 
-  mutate(subset = ifelse(rel_abund > 0.01, "Abundant",
-                         "Rare (<1% of Total Reads Within a Host Phycosphere)")) |>
-  ggplot( aes(x = reorder_within(asv, -rel_abund, fun = sum, within = subset), y = rel_abund, fill = host_species)) +
+D31_plots_combined <- agg_genus_data_D31_color |>
+  mutate(
+    subset = ifelse(
+      rel_abund > 0.01,
+      "Abundant",
+      "Rare (<1% of Total Reads Within a Host Phycosphere)"
+    )
+  ) |>
+  ggplot(aes(
+    x = reorder_within(asv,-rel_abund, fun = sum, within = subset),
+    y = rel_abund,
+    fill = host_species
+  )) +
   geom_col() +
   scale_x_reordered() +
-  facet_wrap(~subset, scales = "free") +
+  facet_wrap( ~ subset, scales = "free") +
   theme_pubclean() +
-  scale_fill_manual(values = c("Chlorella"  = "#7FC97F",
-  "Coelastrum" = "#BEAED4",
-  "Scenedesmus" = "#E0115F",
-  "Monoraphidium"="#FDC086",
-  "Selenastrum"= "#386CB0"), "Host Algae")  +
-  geom_text(aes(label = significant), 
-              position = position_stack(vjust = 0.5), vjust = .8, size = 20 / .pt) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
-    labs( y = "Cumulative Relative Abundance (ASV)", x = "Amplicon Sequence Variant", fill = '',
-          title = "Rank Abundance Curves of Green Alga Phycospheres, 31 Days Post Introduction to Pond Water") 
+  scale_fill_manual(
+    labels = c(
+      "Chlorella" = expression(italic("C. sorokiniana")),
+      "Coelastrum" = expression(italic("C. microporum")),
+      "Scenedesmus" = expression(italic("S. acuminatus")),
+      "Monoraphidium" = expression(italic("M. minutum")),
+      "Selenastrum" = expression(italic("S. capricornutum"))
+    ),
+    values = c(
+      "Chlorella"  = "#7FC97F",
+      "Coelastrum" = "#BEAED4",
+      "Scenedesmus" = "#E0115F",
+      "Monoraphidium" = "#FDC086",
+      "Selenastrum" = "#386CB0"
+    ),
+    "Host Algae"
+  )  +
+  geom_text(
+    aes(label = significant),
+    position = position_stack(vjust = 0.5),
+    vjust = .8,
+    size = 20 / .pt
+  ) +
+  theme(axis.text.x = element_text(
+    angle = 90,
+    vjust = 0.5,
+    hjust = 1
+  )) +
+  labs(y = "Cumulative Relative Abundance (ASV)",
+       x = "Amplicon Sequence Variant",
+       fill = '',
+       title = "Rank Abundance Curves of Green Alga Phycospheres, 31 Days Post Introduction to Pond Water") 
 
 final_plot <- (D3_plots_combined / D31_plots_combined) + plot_annotation(
     tag_levels = "A"
