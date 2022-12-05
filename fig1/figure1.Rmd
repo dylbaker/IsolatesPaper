@@ -120,7 +120,7 @@ length(unique(agg_genus_data$genus))
 
 ```{r GRBC Comparison}
 
-#Filter genus hits from GRBC silva and freshwater database hits
+#Filter genus hits from GRBC silva database hits
 Phycosphere_GRBC_D3 <- inner_join(GRBC_data, D3_data, by = c("asv", "host_species")) |>
   filter(capture_day == "D3") |>
   select(asv, host_species, color) |>
@@ -163,6 +163,7 @@ agg_genus_data_D31_color <- D31_data |>
   filter(!(rel_abund < 0.01) | asv %in% Phycosphere_GRBC_D3$asv | asv %in% Phycosphere_GRBC_D31$asv) |>
   left_join(Phycosphere_GRBC_D31, by = c("asv", "host_species")) |>
   mutate(color = if_else(condition = is.na(color), true = "black", false = color),
+         subset = ifelse(rel_abund > 0.01, "Abundant","Rare (<1% of Total Reads Within a Host Phycosphere)"),
          significant = ifelse(color == "black", "", "*"),
          asv = str_replace(string = asv, pattern = "ASV0+", replacement = ''),
          time = "D31",
@@ -218,13 +219,6 @@ D3_plots_combined <- agg_genus_data_D3_color |>
 
 
 D31_plots_combined <- agg_genus_data_D31_color |>
-  mutate(
-    subset = ifelse(
-      rel_abund > 0.01,
-      "Abundant",
-      "Rare (<1% of Total Reads Within a Host Phycosphere)"
-    )
-  ) |>
   ggplot(aes(
     x = reorder_within(asv,-rel_abund, fun = sum, within = subset),
     y = rel_abund,
@@ -342,7 +336,9 @@ pure_isolates <- GRBC_data |>
   ungroup() |>
   distinct(Isolate_Number, .keep_all = T) |>
   #Duplicate isolates that need to be filtered by hand.
-  filter(!Group %in% c('11_DF','S15','S16','S20','S25','34_DF','S3','6_DF','7_DF','8_DF','S9W'))
+  filter(!Group %in% c('11_DF','S15','S16','S20','S25','34_DF','S3','6_DF','7_DF','8_DF','S9W')) |>
+  mutate(asv = str_replace(string = asv, pattern = "ASV0+|ASV", replacement = '')) |>
+  select(-rel_abund)
 
 frequency <- pure_isolates |>
   group_by(capture_day) |>
@@ -375,8 +371,14 @@ duplicates <- pure_isolates |>
   mutate(fraction = value/n) |>
   group_by(distinct_hosts) |>
   summarise(total_fraction = mean(fraction))
+
+asv_abundance <- full_join(agg_genus_data_D3_color,agg_genus_data_D31_color) |>
+  filter(significant == "*") |>
+  select(asv, host_species, time, rel_abund) |>
+  right_join(pure_isolates, by = c("asv","host_species","time" = "capture_day") )
+
   
-pure_isolate_tax <- pure_isolates |>
-  select(Group, Isolate_Number, asv, host_species, capture_day, domain:genus)
+pure_isolate_tax <- asv_abundance |>
+  select(Group, Isolate_Number, asv,rel_abund, host_species, time, domain:genus)
 write.csv(pure_isolate_tax, "GRBC_pure_isolate_taxonomy.csv")
 ```
