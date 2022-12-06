@@ -1,7 +1,8 @@
 library(tidyverse)
 library(ggplot2)
-library(lme4)
 library(kmlShape)
+library(patchwork)
+library(ggpubr)
 
 set.seed(09042018)
 
@@ -23,7 +24,7 @@ cluster_optimize <- function(n, species, df){
   
   clusters <- data.frame(clds@clusters) %>%
     rownames_to_column("Isolate") %>%
-    rename(Cluster = clds.clusters)
+    dplyr::rename("Cluster" = "clds.clusters")
   
   traj_with_clus <- left_join(traj@trajLong, clusters, by = "Isolate")%>%
     split(., .$Isolate)
@@ -46,7 +47,7 @@ cluster_optimize <- function(n, species, df){
 
 # Plots clustering attempts with different N for implimentation of elbow method
 optimization_plot <- function(species, df, optimal_number){
-  plot_title <- paste("Cluster Optimization for\n", str_to_title(species), " Growth Curves", sep = "")
+  plot_title <- substitute(paste("Cluster Optimization for\n", italic(species), " Growth Curves", sep = ""))
   
   in_clus_dist_plot <- ggplot(data = df,
                               aes(x = Number_of_Clus,
@@ -66,15 +67,15 @@ optimization_plot <- function(species, df, optimal_number){
   #       axis.title.y = element_text(size = 16),
   #       axis.text.y = element_text(size = 14),
   #       axis.text.x = element_text(size = 14))
-  in_clus_dist_plot
+  #in_clus_dist_plot
   
-  optimize_filename <- paste(species, "cluster", "optimize", "plot", sep = "_")%>%
-    paste(., "png", sep = ".")
-  
-  ggsave(optimize_filename,
-         plot = in_clus_dist_plot,
-         device = "png",
-         path = "./supplement/cluster_plots/")
+  # optimize_filename <- paste(species, "cluster", "optimize", "plot", sep = "_")%>%
+  #   paste(., "png", sep = ".")
+  # 
+  # ggsave(optimize_filename,
+  #        plot = in_clus_dist_plot,
+  #        device = "png",
+  #        path = "./supplement/cluster_plots/")
   
   return(in_clus_dist_plot)
 }
@@ -229,7 +230,7 @@ sm_distances <- bind_rows(lapply(cNums, cluster_optimize, species = "selenastrum
 # NOTE: Optimal Number is determined by looking at the plots and identifying the "Elbow"
 # The plotting function requires an optimal number to plot a vertical line at that point
 # If running script for the first time, guess any number 1:15 then refine after plot is made
-plot_cs <- optimization_plot("chlorella", cs_distances, optimal_number = 6)
+plot_cs <- optimization_plot("C. sorokinana", cs_distances, optimal_number = 6)
 plot_cm <- optimization_plot("coelastrum", cm_distances, optimal_number = 4)
 plot_sa <- optimization_plot("scenedesmus", sa_distances, optimal_number = 5)
 plot_mm <- optimization_plot("monoraphidium", mm_distances, optimal_number = 5)
@@ -254,7 +255,7 @@ for(i in 1:length(species_list)){
     mutate(host_species = species)
 }
 
-cluster_data_all <- bind_rows(cluster_data) %>% rename(Cluster = cld.clusters)
+cluster_data_all <- bind_rows(cluster_data) %>% dplyr::rename("Cluster" = "cld.clusters")
 avg_traj_all <- bind_rows(avg_traj)
 
 data_4plots <- left_join(reader_data_raw, algal_flag)%>%
@@ -321,3 +322,30 @@ for(i in 1:length(facet_plots)){
          limitsize = TRUE,
          bg = "transparent")
 }
+#Custom patchwork plots
+cs_clusters <- ggplot(data = cs_distances,
+                      aes(x = Number_of_Clus,
+                          y = Mean_in_Clus_Dist))+
+  geom_vline(xintercept = 6, color = "red")+
+  geom_point()+
+  geom_line()+
+  labs(x = "Number of Clusters",
+       y = "Within-Cluster Fréchet Distance")+
+  theme_pubr()
+chlorella_facets <- facet_plots$chlorella + theme_pubr() 
+
+fig_S1 <- cs_clusters + chlorella_facets +
+  plot_annotation(tag_levels = "A",
+                  title = "Cluster Optimization for C. sorokinana Growth Curves"
+                    )+
+  plot_layout(guides = 'collect') & 
+  theme(legend.position = "bottom",
+        legend.justification = "center")
+png(filename = "./Supplement/fig_S1.png",
+    res = 450,
+    type = "cairo",
+    units = "in",
+    width = 12,
+    height = 6)
+fig_S1
+dev.off()
