@@ -1,0 +1,101 @@
+#Using mothur 1.48.0
+set.logfile(name = miseq_silva138_1_combined.logfile)
+
+set.current(processors=36)
+
+#Set mothur's working directory to the current one, and the output directory to a new folder
+set.dir(input = .;../miseq_subsample, output = ../mothur_miseq_output)
+#Make the paired reads file for make.contigs
+make.file(inputdir=., type=fastq, prefix=stability) 
+
+#Make contigs and screen seqs can be part of the same command now.
+make.contigs(file=stability.files, maxambig=0, maxlength=275)
+ 
+summary.seqs()
+
+#Combine duplicate sequences to conserve processing power
+unique.seqs(fasta=current, count = stability.contigs.count_table)
+summary.seqs()
+#Shows all saved mothur files at the moment
+get.current()
+
+### Pull in Silva Database, Align Seqs, did this separately. look at mothur.silva.logfile for info
+#pcr.seqs(fasta=silva.nr_v138_1.align, start=11895, end=25318, keepdots=F)
+
+##Merge sanger and miseq fasta, count_table files.
+merge.count(count = GRBC_V4.unique.count_table-stability.trim.contigs.count_table, output = stability.trim.contigs.merge.count_table)
+merge.files(input = GRBC_V4.unique.fasta-stability.trim.contigs.unique.fasta, output = stability.trim.contigs.unique.merge.fasta)
+
+##Resume normal pipeline
+align.seqs(fasta=stability.trim.contigs.unique.merge.fasta, reference=silva.nr_v138_1.pcr.align)
+
+summary.seqs(fasta=current, count=current)
+#Screen sequences that are within the aligned v4 region
+screen.seqs(fasta=current, count=current, start=1968, end=11550, maxhomop=8)
+
+summary.seqs(fasta=current, count=current)
+filter.seqs(fasta=current, vertical=T, trump=.)
+## created merged.filter, merged.good.filter.fasta
+
+unique.seqs(fasta=current, count=current)
+## created merged.good.filter.count_table, merged.good.filter.unique.fasta 
+
+pre.cluster(fasta=current, count=current, diffs=2)
+## creates a bunch of precluster files (one for each group?)
+
+
+chimera.vsearch(fasta=current, count=current, dereplicate=t)
+## creates stability.trim.contigs.unique.merge.good.filter.unique.precluster.denovo.vsearch.count_table, stability.trim.contigs.unique.merge.good.filter.unique.precluster.denovo.vsearch.chimeras, stability.trim.contigs.unique.merge.good.filter.unique.precluster.denovo.vsearch.accnos
+### stability.trim.contigs.unique.merge.good.filter.unique.precluster.denovo.vsearch.fasta
+summary.seqs(fasta=current, count=current)
+
+classify.seqs(fasta=current,count=current, reference=silva.nr_v138_1.pcr.align, taxonomy=silva.nr_v138_1.tax)
+## creates 
+
+get.current()
+
+remove.lineage(fasta=current, count=current, taxonomy= current, taxon=Chloroplast-Mitochondria-unknown-Archaea-Eukaryota)
+## output files
+#stability.trim.contigs.unique.merge.good.filter.unique.precluster.denovo.vsearch.nr_v138_1.wang.pick.taxonomy
+#stability.trim.contigs.unique.merge.good.filter.unique.precluster.denovo.vsearch.nr_v138_1.wang.accnos
+#stability.trim.contigs.unique.merge.good.filter.unique.precluster.denovo.vsearch.pick.count_table
+#stability.trim.contigs.unique.merge.good.filter.unique.precluster.denovo.vsearch.pick.fasta
+
+summary.tax(taxonomy=current, count=current)
+## output files
+#merged.good.filter.unique.precluster.pick.pds.wang.pick.tax.summary
+
+#Remove Mock community
+#remove.groups(count=stability.trim.contigs.good.unique.good.filter.unique.precluster.denovo.vsearch.pick.count_table, fasta=stability.trim.contigs.good.unique.good.filter.unique.precluster.denovo.vsearch.pick.fasta, taxonomy=stability.trim.contigs.good.unique.good.filter.unique.precluster.denovo.vsearch.pds.wang.pick.taxonomy, groups=Mock)
+### We are almost done, so we are going to rename the important files and save them
+rename.file(fasta=current, count=current, taxonomy=current, prefix=final)
+
+get.current()
+#Combine samples that are part of the same groups, e.g. all ChlorellaD3 samples
+merge.groups(count=final.count_table, design=GRBC.design, fasta=final.fasta)
+
+
+### ASVs (pre.cluster step did this earlier) 
+#Setting random seed to 19760620.
+set.dir(input = .;../miseq_subsample, output = ./ASV)
+make.shared(count=final.merge.count_table)
+classify.otu(list=final.merge.asv.list, count=final.merge.count_table, taxonomy=final.taxonomy, label=ASV)
+
+
+
+#### This feeds all tree methods!!
+set.dir(input = .;./ASV, output = ./tree_files)
+dist.seqs(fasta=final.fasta, output=lt)
+# output: final.phylip.dist
+
+#### For Fasttree down the road
+get.oturep(phylip=final.phylip.dist, list=final.merge.asv.list, fasta=final.fasta, count=final.merge.count_table, label = ASV)
+# outputs:
+# final.an.unique.rep.count_table
+# final.an.unique.rep.fasta
+
+
+#Extract ASV names from get.oturep call
+#sed 's/>M.*ASV/>ASV/g;s/>.*V4[[:space:]]ASV/>ASV/g' final.merge.asv.ASV.rep.fasta |sed -e 's/|.*//g'> asv_list.fasta
+
+quit()

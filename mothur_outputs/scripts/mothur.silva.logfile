@@ -1,0 +1,108 @@
+Linux version
+
+Using ReadLine,Boost,HDF5,GSL
+mothur v.1.48.0
+Last updated: 5/20/22
+by
+Patrick D. Schloss
+
+Department of Microbiology & Immunology
+
+University of Michigan
+http://www.mothur.org
+
+When using, please cite:
+Schloss, P.D., et al., Introducing mothur: Open-source, platform-independent, community-supported software for describing and comparing microbial communities. Appl Environ Microbiol, 2009. 75(23):7537-41.
+
+Distributed under the GNU General Public License
+
+Type 'help()' for information on the commands that are available
+
+For questions and analysis support, please visit our forum at https://forum.mothur.org
+
+Type 'quit()' to exit program
+
+[NOTE]: Setting random seed to 19760620.
+
+Interactive Mode
+
+
+
+mothur > pcr.seqs(fasta=silva.seed_v132.align, start=11895, end=25318, keepdots=F)
+
+Using 36 processors.
+[NOTE]: no sequences were bad, removing silva.seed_v132.bad.accnos
+
+It took 7 secs to screen 11180 sequences.
+
+Output File Names: 
+silva.seed_v132.pcr.align
+
+
+
+mothur > summary.seqs()
+Using silva.seed_v132.pcr.align as input file for the fasta parameter.
+
+Using 36 processors.
+
+		Start	End	NBases	Ambigs	Polymer	NumSeqs
+Minimum:	1	11550	260	0	3	1
+2.5%-tile:	1	13424	291	0	4	280
+25%-tile:	1	13424	292	0	4	2796
+Median: 	1	13424	292	0	5	5591
+75%-tile:	1	13424	293	0	6	8386
+97.5%-tile:	1	13424	460	1	6	10901
+Maximum:	3	13424	1121	5	9	11180
+Mean:	1	13423	329	0	4
+# of Seqs:	11180
+
+It took 3 secs to summarize 11180 sequences.
+
+Output File Names:
+silva.seed_v132.pcr.summary
+
+
+mothur > rename.file(input = silva.seed_v132.pcr.align, new = silva.v4.fasta)
+
+Current files saved by mothur:
+fasta=silva.seed_v132.pcr.align
+processors=36
+summary=silva.seed_v132.pcr.summary
+
+mothur > pcr.seqs(fasta=silva.nr_v132.align, start=11895, end=25318, keepdots=F)
+
+Using 36 processors.
+[NOTE]: no sequences were bad, removing silva.nr_v132.bad.accnos
+
+It took 59 secs to screen 213119 sequences.
+
+Output File Names: 
+silva.nr_v132.pcr.align
+
+
+
+mothur > summary.seqs()
+Using silva.nr_v132.pcr.align as input file for the fasta parameter.
+
+Using 36 processors.
+
+		Start	End	NBases	Ambigs	Polymer	NumSeqs
+Minimum:	1	9876	218	0	3	1
+2.5%-tile:	1	13424	291	0	4	5328
+25%-tile:	1	13424	292	0	4	53280
+Median: 	1	13424	292	0	5	106560
+75%-tile:	1	13424	292	0	5	159840
+97.5%-tile:	1	13424	458	1	6	207792
+Maximum:	4225	13424	1520	5	16	213119
+Mean:	1	13423	307	0	4
+# of Seqs:	213119
+
+It took 8 secs to summarize 213119 sequences.
+
+Output File Names:
+silva.nr_v132.pcr.summary
+
+
+mothur > quit()
+Logfile : mothur.1665515689.logfile
+

@@ -1,0 +1,39 @@
+
+Setting logfile name to merge_groups.logfile
+
+
+mothur > set.dir(input = ., output = ./regrouped_output)
+Mothur's directories:
+outputDir=/gpfs/accounts/vdenef_root/vdenef0/bakerdyl/IsolatesPaper16s_data/mothur_miseq_output/regrouped_output/
+inputdir=
+	/gpfs/accounts/vdenef_root/vdenef0/bakerdyl/IsolatesPaper16s_data/mothur_miseq_output/
+
+
+mothur > merge.groups(count=final.count_table, design=GRBC.design, fasta=final.fasta)
+
+Output File Names: 
+/gpfs/accounts/vdenef_root/vdenef0/bakerdyl/IsolatesPaper16s_data/mothur_miseq_output/regrouped_output/final.merge.count_table
+
+
+mothur > make.shared(count = current)
+Using /gpfs/accounts/vdenef_root/vdenef0/bakerdyl/IsolatesPaper16s_data/mothur_miseq_output/regrouped_output/final.merge.count_table as input file for the count parameter.
+ASV
+
+Output File Names:
+/gpfs/accounts/vdenef_root/vdenef0/bakerdyl/IsolatesPaper16s_data/mothur_miseq_output/regrouped_output/final.merge.asv.list
+/gpfs/accounts/vdenef_root/vdenef0/bakerdyl/IsolatesPaper16s_data/mothur_miseq_output/regrouped_output/final.merge.asv.shared
+
+
+mothur > classify.otu(list=final.merge.asv.list, count=final.merge.count_table, taxonomy=final.taxonomy, label=ASV)
+Unable to open final.merge.asv.list. Trying input directory /gpfs/accounts/vdenef_root/vdenef0/bakerdyl/IsolatesPaper16s_data/mothur_miseq_output/final.merge.asv.list.
+Unable to open /gpfs/accounts/vdenef_root/vdenef0/bakerdyl/IsolatesPaper16s_data/mothur_miseq_output/final.merge.asv.list. Trying output directory /gpfs/accounts/vdenef_root/vdenef0/bakerdyl/IsolatesPaper16s_data/mothur_miseq_output/regrouped_output/final.merge.asv.list.
+ASV
+
+Output File Names: 
+/gpfs/accounts/vdenef_root/vdenef0/bakerdyl/IsolatesPaper16s_data/mothur_miseq_output/regrouped_output/final.merge.asv.ASV.cons.taxonomy
+/gpfs/accounts/vdenef_root/vdenef0/bakerdyl/IsolatesPaper16s_data/mothur_miseq_output/regrouped_output/final.merge.asv.ASV.cons.tax.summary
+
+
+mothur > quit
+Logfile : merge_groups.logfile
+
